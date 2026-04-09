@@ -1,3 +1,6 @@
+"""
+Flask app that connects MongoDB to the web app 
+"""
 from flask import Flask, render_template
 from pymongo import MongoClient
 
@@ -8,6 +11,9 @@ collection = db['records']
 
 @app.route('/')
 def home():
+    """
+    Fetches records from the DB and renders them to the web app
+    """
     records = list(collection.find())
     print(records)
     return render_template('index.html', records=records)

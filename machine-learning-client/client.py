@@ -1,5 +1,9 @@
+'''
+Script that connects to Database 
+'''
+
 from datetime import datetime
-from pymongo import MongoClient 
+from pymongo import MongoClient
 
 client = MongoClient("mongodb://admin:secret@mongo:27017/?authSource=admin")
 db = client['mydatabase']
