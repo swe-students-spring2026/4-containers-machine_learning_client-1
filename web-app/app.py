@@ -18,7 +18,6 @@ def home():
     """
     Fetches records from the DB and renders them to the web app
     """
-        
     records = list(collection.find())
     return render_template("index.html", records=records)
 

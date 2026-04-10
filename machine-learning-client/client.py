@@ -11,6 +11,7 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 MONGO_URI = os.environ["MONGO_URI"]
 MONGO_DB = os.getenv("MONGO_DB", "mydatabase")
@@ -76,11 +77,23 @@ def classify_attention(detection_result):
     return "attentive"
 
 
-def run_monitoring(collection, control_collection):
-    """
-    Capture frames, classify attention, and write events while enabled.
-    """
+def process_frame(frame, landmarker, last_attentive_at):
+    """Classify one camera frame and return an event plus timer state."""
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+    timestamp_ms = int(time.monotonic() * 1000)
+    detection_result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
+    state = classify_attention(detection_result)
+    now = time.monotonic()
+    if state == "attentive":
+        last_attentive_at = now
+    flag = state != "attentive" and now - last_attentive_at > FLAG_THRESHOLD_SEC
+    return {"timestamp": time.time(), "state": state, "flag": flag}, last_attentive_at
+
+
+def run_monitoring(collection, control_collection):
+    """Capture frames, classify attention, and write events while enabled."""
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
         print(f"Unable to open camera index {CAMERA_INDEX}", file=sys.stderr)
@@ -101,21 +114,12 @@ def run_monitoring(collection, control_collection):
                 print("Camera frame read failed", file=sys.stderr)
                 break
 
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-            timestamp_ms = int(time.monotonic() * 1000)
-            detection_result = landmarker.detect_for_video(mp_image, timestamp_ms)
-
-            state = classify_attention(detection_result)
-            now = time.monotonic()
-            if state == "attentive":
-                last_attentive_at = now
-            flag = state != "attentive" and now - last_attentive_at > FLAG_THRESHOLD_SEC
-
-            event = {"timestamp": time.time(), "state": state, "flag": flag}
+            event, last_attentive_at = process_frame(
+                frame, landmarker, last_attentive_at
+            )
             try:
                 collection.insert_one(event)
-            except Exception as exc:
+            except PyMongoError as exc:
                 print(f"MongoDB insert failed: {exc}", file=sys.stderr)
             print(event)
 
@@ -132,7 +136,6 @@ def main():
     """
     Wait for the start signal, then run attention monitoring.
     """
-    
     mongo_client = MongoClient(MONGO_URI)
     db = mongo_client[MONGO_DB]
     event_collection = db[MONGO_COLLECTION]
