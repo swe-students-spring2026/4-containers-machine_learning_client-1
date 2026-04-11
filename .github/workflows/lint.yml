@@ -27,7 +27,11 @@ jobs:
         # you may set pylint to ignore any files or dependencies that make no sense to lint
         run: |
           cd ${{ matrix.subdir }}
-          pipenv run pylint **/*.py
+          if [ "${{ matrix.subdir }}" = "machine-learning-client" ]; then
+            pipenv run pylint --persistent=n --ignored-modules=cv2,mediapipe,mediapipe.tasks,mediapipe.tasks.python --generated-members=cv2.\*,mediapipe.\* **/*.py
+          else
+            pipenv run pylint --persistent=n **/*.py
+          fi
       - name: Format with black
         if: ${{ hashFiles(format('{0}/**/*.py', matrix.subdir)) != '' }}
         # you may set black to ignore any files or dependencies that make no sense to format
