@@ -1,21 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Mongo Data</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attention Monitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
 </head>
-<body>
-    <h1>Mongo Data</h1>
+<body
+    data-monitoring="{{ 'true' if monitoring else 'false' }}"
+    data-monitoring-since="{{ monitoring_since }}"
+>
+    <main>
+        <form method="post" action="{{ url_for('stop_monitoring' if monitoring else 'start_monitoring') }}">
+            <button
+                id="toggle-button"
+                type="submit"
+                class="{{ 'stop' if monitoring else '' }}"
+            >
+                {{ 'Stop' if monitoring else 'Start' }}
+            </button>
+        </form>
+    </main>
 
-    {% if records %}
-        {% for record in records %}
-            <p>
-                Timestamp: {{ record.get("timestamp", "N/A") }},
-                State: {{ record.get("state", "N/A") }},
-                Flag: {{ record.get("flag", "N/A") }}
-            </p>
-        {% endfor %}
-    {% else %}
-        <p>No records found.</p>
-    {% endif %}
+    <section id="popup-stack" aria-live="assertive" aria-atomic="false"></section>
+    <video id="camera-preview" autoplay playsinline muted></video>
+
+    <script src="{{ url_for('static', filename='js/index.js') }}"></script>
 </body>
 </html>
