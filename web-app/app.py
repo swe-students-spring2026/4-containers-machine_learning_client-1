@@ -100,9 +100,7 @@ def flagged_events():
         except Exception:  # pylint: disable=broad-exception-caught
             return jsonify({"error": "invalid after_id"}), 400
 
-    records = (
-        event_collection.find(query).sort([("_id", 1)])
-    )
+    records = event_collection.find(query).sort([("_id", 1)])
     events = [
         {
             "id": str(record["_id"]),
