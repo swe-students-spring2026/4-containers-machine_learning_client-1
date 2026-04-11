@@ -4,19 +4,25 @@ services:
     container_name: mongo
     ports:
       - "27017:27017"
+    env_file:
+      - .env
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: secret 
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
 
   machine-learning-client:
     build: ./machine-learning-client
     container_name: machine-learning-client
+    env_file:
+      - .env
     depends_on:
       - mongo
   
   web-app:
     build: ./web-app
+    env_file:
+      - .env
     depends_on:
       - mongo
     ports:
-      - "8080:5000"    
+      - "8080:5000"

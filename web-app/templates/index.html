@@ -10,8 +10,8 @@
         {% for record in records %}
             <p>
                 Timestamp: {{ record.get("timestamp", "N/A") }},
-                Label: {{ record.get("label", "N/A") }},
-                Confidence: {{ record.get("confidence", "N/A") }}
+                State: {{ record.get("state", "N/A") }},
+                Flag: {{ record.get("flag", "N/A") }}
             </p>
         {% endfor %}
     {% else %}
