@@ -24,5 +24,6 @@ services:
       - .env
     depends_on:
       - mongo
+      - machine-learning-client
     ports:
-      - "8080:5000"
+      - "8000:5000"
