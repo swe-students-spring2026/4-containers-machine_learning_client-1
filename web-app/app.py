@@ -72,7 +72,7 @@ def stop_monitoring():
 
 
 @app.get("/status")
-def status():
+def get_status():
     """Return the current monitoring status."""
 
     control = get_monitoring_control()
