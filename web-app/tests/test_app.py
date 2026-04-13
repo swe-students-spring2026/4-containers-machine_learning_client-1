@@ -1,7 +1,9 @@
+"""Tests for the Flask Web App Routes"""
 from unittest.mock import Mock, patch
 
 
 def test_home_route_status_code(client):
+    """Test home route returns to 200"""
     with patch("app.get_monitoring_control", return_value={}):
         response = client.get("/")
 
@@ -9,6 +11,7 @@ def test_home_route_status_code(client):
 
 
 def test_status_route_returns_json(client):
+    """Test that route returns expected JSON"""
     with patch(
         "app.get_monitoring_control",
         return_value={"status": "running", "updated_at": 123.45},
@@ -22,6 +25,7 @@ def test_status_route_returns_json(client):
 
 
 def test_start_monitoring_redirects(client):
+    """Tests that start monitoring redirects to home page"""
     with patch("app.set_monitoring_status") as mock_set_status:
         response = client.post("/start")
 
@@ -30,6 +34,7 @@ def test_start_monitoring_redirects(client):
 
 
 def test_stop_monitoring_redirects(client):
+    """Test that stop monitoring redirects to home page"""
     with patch("app.set_monitoring_status") as mock_set_status:
         response = client.post("/stop")
 
@@ -38,6 +43,7 @@ def test_stop_monitoring_redirects(client):
 
 
 def test_events_invalid_after_id_returns_400(client):
+    """Test that invalid after_id returns to 400"""
     response = client.get("/events?after_id=not-a-real-objectid")
 
     assert response.status_code == 400
@@ -46,6 +52,7 @@ def test_events_invalid_after_id_returns_400(client):
 
 
 def test_events_returns_flagged_events(client):
+    """Test that flagged events are returned as JSON"""
     fake_record = {
         "_id": "abc123",
         "timestamp": 123.45,
@@ -68,4 +75,3 @@ def test_events_returns_flagged_events(client):
     assert data["events"][0]["timestamp"] == 123.45
     assert data["events"][0]["state"] == "looking_away"
     assert data["events"][0]["flag"] is True
-
