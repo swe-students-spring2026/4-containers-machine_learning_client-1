@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 os.environ["MONGO_URI"] = "mongodb://localhost:27017"
 
-import client
+import client  # pylint: disable=wrong-import-position
 
 
 def make_detection_result(face_landmarks):

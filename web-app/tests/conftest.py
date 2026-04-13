@@ -1,14 +1,14 @@
-"""Pytest for Flask app."""
+"""Pytest fixtures for the web app."""
 
 import os
 import sys
 
 import pytest
-from app import app
 
+os.environ["MONGO_URI"] = "mongodb://localhost:27017"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-
+from app import app  # pylint: disable=wrong-import-position
 
 
 @pytest.fixture(name="client")
