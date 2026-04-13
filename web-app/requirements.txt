@@ -3,3 +3,5 @@ pymongo
 pytest
 pytest-flask
 coverage
+pylint
+black
