@@ -6,35 +6,35 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # repeat same job for each subsystem in the following subdirectories
         subdir: [web-app, machine-learning-client]
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12" # update version(s) as needed
+          python-version: "3.12"
+
       - name: Install dependencies
         if: ${{ hashFiles(format('{0}/**/*.py', matrix.subdir)) != '' }}
         run: |
           cd ${{ matrix.subdir }}
           python -m pip install --upgrade pip
-          python -m pip install pipenv
-          pipenv sync --dev --python $(which python)
-        # pipenv shell --fancy --python $(which python)
+          python -m pip install -r requirements.txt
+
       - name: Lint with pylint
         if: ${{ hashFiles(format('{0}/**/*.py', matrix.subdir)) != '' }}
-        # you may set pylint to ignore any files or dependencies that make no sense to lint
         run: |
           cd ${{ matrix.subdir }}
           if [ "${{ matrix.subdir }}" = "machine-learning-client" ]; then
-            pipenv run pylint --persistent=n --ignored-modules=cv2,mediapipe,mediapipe.tasks,mediapipe.tasks.python --generated-members=cv2.\*,mediapipe.\* **/*.py
+            python -m pylint --persistent=n --ignored-modules=cv2,mediapipe,mediapipe.tasks,mediapipe.tasks.python --generated-members=cv2.\*,mediapipe.\* **/*.py
           else
-            pipenv run pylint --persistent=n **/*.py
+            python -m pylint --persistent=n **/*.py
           fi
+
       - name: Format with black
         if: ${{ hashFiles(format('{0}/**/*.py', matrix.subdir)) != '' }}
-        # you may set black to ignore any files or dependencies that make no sense to format
         run: |
           cd ${{ matrix.subdir }}
-          pipenv run black --diff --check .
+          python -m black --diff --check .
