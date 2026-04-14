@@ -2,12 +2,14 @@
 Run the MediaPipe attention monitoring client.
 """
 
+import base64
 import os
 import sys
 import time
 
 import cv2
 import mediapipe as mp
+import numpy as np
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from pymongo import MongoClient
@@ -17,7 +19,7 @@ MONGO_URI = os.environ["MONGO_URI"]
 MONGO_DB = os.getenv("MONGO_DB", "mydatabase")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "attention_events")
 CONTROL_COLLECTION = os.getenv("CONTROL_COLLECTION", "attention_control")
-CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
+FRAME_COLLECTION = os.getenv("FRAME_COLLECTION", "attention_frames")
 PROCESS_INTERVAL_SEC = float(os.getenv("PROCESS_INTERVAL_SEC", "1"))
 FLAG_THRESHOLD_SEC = float(os.getenv("FLAG_THRESHOLD_SEC", "5"))
 ORIENTATION_THRESHOLD = float(os.getenv("ORIENTATION_THRESHOLD", "0.15"))
@@ -50,7 +52,7 @@ def create_landmarker():
         return None
     options = vision.FaceLandmarkerOptions(
         base_options=python.BaseOptions(model_asset_path=MODEL_PATH),
-        running_mode=vision.RunningMode.VIDEO,
+        running_mode=vision.RunningMode.IMAGE,
         num_faces=1,
     )
     return vision.FaceLandmarker.create_from_options(options)
@@ -81,8 +83,7 @@ def process_frame(frame, landmarker, last_attentive_at):
     """Classify one camera frame and return an event plus timer state."""
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-    timestamp_ms = int(time.monotonic() * 1000)
-    detection_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+    detection_result = landmarker.detect(mp_image)
 
     state = classify_attention(detection_result)
     now = time.monotonic()
@@ -92,27 +93,52 @@ def process_frame(frame, landmarker, last_attentive_at):
     return {"timestamp": time.time(), "state": state, "flag": flag}, last_attentive_at
 
 
-def run_monitoring(collection, control_collection):
-    """Capture frames, classify attention, and write events while enabled."""
-    cap = cv2.VideoCapture(CAMERA_INDEX)
-    if not cap.isOpened():
-        print(f"Unable to open camera index {CAMERA_INDEX}", file=sys.stderr)
-        return
+def decode_frame(frame_document):
+    """Decode a base64 JPEG frame from MongoDB into an OpenCV image."""
+    image_base64 = frame_document.get("image_base64", "")
+    if not image_base64:
+        return None
+
+    try:
+        image_bytes = base64.b64decode(image_base64)
+    except (ValueError, TypeError):
+        return None
+
+    np_buffer = np.frombuffer(image_bytes, dtype=np.uint8)
+    return cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
+
+
+def run_monitoring(collection, control_collection, frame_collection):
+    """Process frontend-uploaded frames and write events while enabled."""
 
     landmarker = create_landmarker()
     if landmarker is None:
-        cap.release()
         return
 
     last_attentive_at = time.monotonic()
+    latest_existing_frame = frame_collection.find_one(sort=[("_id", -1)])
+    last_frame_id = (
+        latest_existing_frame.get("_id") if latest_existing_frame is not None else None
+    )
 
     try:
         while is_monitoring_enabled(control_collection):
             loop_started_at = time.monotonic()
-            ok, frame = cap.read()
-            if not ok:
-                print("Camera frame read failed", file=sys.stderr)
-                break
+            frame_query = {}
+            if last_frame_id is not None:
+                frame_query["_id"] = {"$gt": last_frame_id}
+
+            frame_document = frame_collection.find_one(frame_query, sort=[("_id", 1)])
+            if frame_document is None:
+                elapsed = time.monotonic() - loop_started_at
+                time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
+                continue
+
+            frame = decode_frame(frame_document)
+            last_frame_id = frame_document.get("_id", last_frame_id)
+            if frame is None:
+                continue
+
 
             event, last_attentive_at = process_frame(
                 frame, landmarker, last_attentive_at
@@ -129,7 +155,6 @@ def run_monitoring(collection, control_collection):
         print("Stopping client")
     finally:
         landmarker.close()
-        cap.release()
 
 
 def main():
@@ -140,12 +165,13 @@ def main():
     db = mongo_client[MONGO_DB]
     event_collection = db[MONGO_COLLECTION]
     control_collection = db[CONTROL_COLLECTION]
+    frame_collection = db[FRAME_COLLECTION]
 
     try:
         while True:
             if is_monitoring_enabled(control_collection):
                 print("Attention monitoring started")
-                run_monitoring(event_collection, control_collection)
+                run_monitoring(event_collection, control_collection, frame_collection)
                 print("Attention monitoring stopped")
             time.sleep(PROCESS_INTERVAL_SEC)
     except KeyboardInterrupt:

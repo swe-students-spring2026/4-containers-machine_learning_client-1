@@ -2,6 +2,8 @@
 Minimal Flask frontend for controlling the attention monitoring client.
 """
 
+import base64
+import binascii
 import os
 import time
 
@@ -14,6 +16,7 @@ client = MongoClient(os.environ["MONGO_URI"])
 db = client[os.getenv("MONGO_DB", "mydatabase")]
 event_collection = db[os.getenv("MONGO_COLLECTION", "attention_events")]
 control_collection = db[os.getenv("CONTROL_COLLECTION", "attention_control")]
+frame_collection = db[os.getenv("FRAME_COLLECTION", "attention_frames")]
 
 
 def is_monitoring_enabled():
@@ -111,6 +114,24 @@ def flagged_events():
         for record in records
     ]
     return jsonify({"events": events})
+
+
+@app.post("/frames")
+def ingest_frame():
+    """Store one frontend-captured camera frame for backend processing."""
+
+    payload = request.get_json(silent=True) or {}
+    image_base64 = payload.get("image_base64", "")
+    if not isinstance(image_base64, str) or not image_base64:
+        return jsonify({"error": "missing image_base64"}), 400
+
+    try:
+        base64.b64decode(image_base64, validate=True)
+    except (binascii.Error, ValueError):
+        return jsonify({"error": "invalid image_base64"}), 400
+
+    frame_collection.insert_one({"timestamp": time.time(), "image_base64": image_base64})
+    return jsonify({"ok": True}), 201
 
 
 if __name__ == "__main__":
