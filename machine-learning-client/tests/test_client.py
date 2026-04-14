@@ -55,6 +55,25 @@ def test_is_monitoring_enabled_false_when_not_running():
     assert client.is_monitoring_enabled(control_collection) is False
 
 
+def test_is_alarm_active_true():
+    """Return True when an alarm is active."""
+    control_collection = Mock()
+    control_collection.find_one.return_value = {
+        "_id": "monitoring",
+        "alarm_active": True,
+    }
+
+    assert client.is_alarm_active(control_collection) is True
+
+
+def test_is_alarm_active_false_when_missing():
+    """Return False when no alarm is active."""
+    control_collection = Mock()
+    control_collection.find_one.return_value = None
+
+    assert client.is_alarm_active(control_collection) is False
+
+
 def test_classify_attention_absent():
     """Return absent when no face landmarks are detected."""
     detection_result = make_detection_result([])
@@ -101,6 +120,19 @@ def test_classify_attention_zero_cheek_span_returns_attentive():
 @patch("client.os.path.exists", return_value=False)
 def test_create_landmarker_returns_none_when_model_missing(_mock_exists):
     """Return None when the model file is missing."""
+    assert client.create_landmarker() is None
+
+
+@patch("client.os.path.exists", return_value=True)
+@patch(
+    "client.vision.FaceLandmarker.create_from_options",
+    side_effect=OSError("libGLESv2.so.2: cannot open shared object file"),
+)
+def test_create_landmarker_returns_none_when_native_library_missing(
+    _mock_create,
+    _mock_exists,
+):
+    """Return None when MediaPipe native dependencies cannot be loaded."""
     assert client.create_landmarker() is None
 
 
@@ -158,6 +190,30 @@ def test_process_frame_flags_when_over_threshold(
     assert event["state"] == "looking_away"
     assert event["flag"] is True
     assert last_attentive_at == 190.0
+
+
+def test_activate_alarm_updates_control_document():
+    """Persist the alarm metadata in the monitoring control document."""
+    control_collection = Mock()
+    event = {
+        "state": "looking_away",
+        "timestamp": 1234567890.0,
+    }
+
+    client.activate_alarm(control_collection, "event-id", event)
+
+    control_collection.update_one.assert_called_once_with(
+        {"_id": "monitoring"},
+        {
+            "$set": {
+                "alarm_active": True,
+                "alarm_event_id": "event-id",
+                "alarm_state": "looking_away",
+                "alarm_triggered_at": 1234567890.0,
+            }
+        },
+        upsert=True,
+    )
 
 
 @patch("client.create_landmarker", return_value=None)
@@ -317,4 +373,67 @@ def test_run_monitoring_handles_insert_error(
 
     client.run_monitoring(collection, Mock(), frame_collection)
 
+    landmarker.close.assert_called_once()
+
+
+@patch("client.time.sleep")
+@patch("client.is_alarm_active", side_effect=[True, False])
+@patch("client.is_monitoring_enabled", side_effect=[True, False])
+@patch("client.create_landmarker")
+def test_run_monitoring_waits_while_alarm_active(
+    mock_create_landmarker,
+    _mock_monitoring_enabled,
+    _mock_alarm_active,
+    mock_sleep,
+):
+    """run_monitoring pauses frame processing until the alarm is dismissed."""
+    landmarker = Mock()
+    mock_create_landmarker.return_value = landmarker
+    frame_collection = Mock()
+
+    client.run_monitoring(Mock(), Mock(), frame_collection)
+
+    frame_collection.find_one.assert_not_called()
+    mock_sleep.assert_called()
+    landmarker.close.assert_called_once()
+
+
+@patch("client.activate_alarm")
+@patch("client.decode_frame", return_value="frame")
+@patch("client.is_alarm_active", return_value=False)
+@patch("client.process_frame", return_value=({"state": "looking_away", "flag": True}, 10.0))
+@patch("client.is_monitoring_enabled", side_effect=[True, False])
+@patch("client.create_landmarker")
+def test_run_monitoring_activates_alarm_for_first_flag(
+    mock_create_landmarker,
+    _mock_enabled,
+    _mock_process_frame,
+    _mock_alarm_active,
+    _mock_decode,
+    mock_activate_alarm,
+):
+    """run_monitoring records a flagged event and raises one persistent alarm."""
+    landmarker = Mock()
+    mock_create_landmarker.return_value = landmarker
+
+    inserted_result = Mock(inserted_id="event-id")
+    collection = Mock()
+    collection.insert_one.return_value = inserted_result
+    control_collection = Mock()
+    frame_collection = Mock()
+    frame_collection.find_one.side_effect = [
+        None,
+        {"_id": "frame1", "image_base64": "aGVsbG8="},
+    ]
+
+    client.run_monitoring(collection, control_collection, frame_collection)
+
+    collection.insert_one.assert_called_once_with(
+        {"state": "looking_away", "flag": True}
+    )
+    mock_activate_alarm.assert_called_once_with(
+        control_collection,
+        "event-id",
+        {"state": "looking_away", "flag": True},
+    )
     landmarker.close.assert_called_once()

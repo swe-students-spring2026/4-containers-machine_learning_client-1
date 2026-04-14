@@ -1,14 +1,44 @@
-const toggleButton = document.getElementById("toggle-button");
 const popupStack = document.getElementById("popup-stack");
+const popupModal = document.getElementById("alarm-modal");
+const alarmMessage = document.getElementById("alarm-message");
+const dismissAlarmButton = document.getElementById("dismiss-alarm-button");
 const cameraPreview = document.getElementById("camera-preview");
+const alarmAudio = document.getElementById("alarm-audio");
 const captureCanvas = document.createElement("canvas");
 
 let monitoring = document.body.dataset.monitoring === "true";
 let pollTimer = null;
-let frameTimer = null;
+let alarmActive = document.body.dataset.alarmActive === "true";
 let sessionStartTimestamp = document.body.dataset.monitoringSince || null;
 let lastSeenId = "";
+const initialAlarmState = document.body.dataset.alarmState || "unknown";
+const initialAlarmTimestamp = Number(document.body.dataset.alarmTimestamp || 0);
+let frameTimer = null;
 let mediaStream = null;
+
+function formatTimestamp(timestamp) {
+    if (!timestamp) {
+        return "Unknown time";
+    }
+    return new Date(timestamp * 1000).toLocaleString();
+}
+
+function updateAlarmUi(alarm) {
+    alarmActive = Boolean(alarm && alarm.active);
+    document.body.classList.toggle("alarm-active", alarmActive);
+    popupModal.classList.toggle("active", alarmActive);
+    dismissAlarmButton.hidden = !alarmActive;
+
+    if (alarmActive && alarm && alarm.event) {
+        alarmMessage.textContent = `State: ${alarm.event.state}. Time: ${formatTimestamp(alarm.event.timestamp)}.`;
+        alarmAudio.currentTime = 0;
+        alarmAudio.play().catch(() => null);
+    } else {
+        alarmMessage.textContent = "Attention monitoring is active.";
+        alarmAudio.pause();
+        alarmAudio.currentTime = 0;
+    }
+}
 
 function createPopup(event) {
     const popup = document.createElement("article");
@@ -18,18 +48,17 @@ function createPopup(event) {
     heading.textContent = "Attention Flag";
 
     const message = document.createElement("p");
-    const timestamp = event.timestamp
-        ? new Date(event.timestamp * 1000).toLocaleString()
-        : "Unknown time";
-    message.textContent = `State: ${event.state}. Time: ${timestamp}.`;
+    message.textContent = `State: ${event.state}. Time: ${formatTimestamp(event.timestamp)}.`;
 
     const closeButton = document.createElement("button");
     closeButton.type = "button";
-    closeButton.textContent = "Close";
-    closeButton.addEventListener("click", () => popup.remove());
+    closeButton.textContent = "Turn Off Alarm";
+    closeButton.addEventListener("click", () => {
+        dismissAlarm().catch(() => null);
+    });
 
-    popup.append(heading, message, closeButton);
-    popupStack.prepend(popup);
+    popup.replaceChildren(heading, message, closeButton);
+    popupStack.replaceChildren(popup);
 }
 
 async function requestCameraAccess() {
@@ -56,7 +85,7 @@ function releaseCameraAccess() {
 }
 
 async function fetchFlaggedEvents() {
-    if (!monitoring) {
+    if (!monitoring || alarmActive) {
         return;
     }
 
@@ -86,7 +115,8 @@ function startPolling() {
     }
     pollTimer = window.setInterval(() => {
         fetchFlaggedEvents().catch(() => null);
-    }, 2000);
+        syncStatus().catch(() => null);
+    }, 1000);
 }
 
 function stopPolling() {
@@ -114,6 +144,7 @@ function captureFrameBase64() {
     if (!context) {
         return "";
     }
+
     context.drawImage(cameraPreview, 0, 0, width, height);
     const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.8);
     const parts = dataUrl.split(",");
@@ -121,7 +152,7 @@ function captureFrameBase64() {
 }
 
 async function uploadFrame() {
-    if (!monitoring || !mediaStream) {
+    if (!monitoring || alarmActive || !mediaStream) {
         return;
     }
 
@@ -141,7 +172,6 @@ function startFrameUploads() {
     if (frameTimer) {
         window.clearInterval(frameTimer);
     }
-
     frameTimer = window.setInterval(() => {
         uploadFrame().catch(() => null);
     }, 1000);
@@ -155,10 +185,81 @@ function stopFrameUploads() {
     frameTimer = null;
 }
 
-if (monitoring) {
-    requestCameraAccess().catch(() => null);
+async function syncStatus() {
+    const response = await fetch("/status");
+    if (!response.ok) {
+        return;
+    }
+
+    const payload = await response.json();
+    monitoring = Boolean(payload.monitoring);
+    sessionStartTimestamp = payload.updated_at || sessionStartTimestamp;
+    updateAlarmUi(payload.alarm);
+
+    if (!monitoring) {
+        popupStack.replaceChildren();
+        stopPolling();
+        stopFrameUploads();
+        releaseCameraAccess();
+        return;
+    }
+
+    await requestCameraAccess();
+    if (alarmActive) {
+        stopPolling();
+        stopFrameUploads();
+        return;
+    }
     startPolling();
     startFrameUploads();
+}
+
+async function dismissAlarm() {
+    dismissAlarmButton.disabled = true;
+    try {
+        const response = await fetch("/alarm/dismiss", { method: "POST" });
+        if (!response.ok) {
+            return;
+        }
+        const payload = await response.json();
+        monitoring = Boolean(payload.monitoring);
+        updateAlarmUi(payload.alarm);
+        popupStack.replaceChildren();
+        if (monitoring) {
+            await requestCameraAccess();
+            startPolling();
+            startFrameUploads();
+        }
+    } finally {
+        dismissAlarmButton.disabled = false;
+    }
+}
+
+dismissAlarmButton.addEventListener("click", () => {
+    dismissAlarm().catch(() => null);
+});
+
+updateAlarmUi({
+    active: alarmActive,
+    event: alarmActive
+        ? {
+            state: initialAlarmState,
+            timestamp: Number.isFinite(initialAlarmTimestamp) && initialAlarmTimestamp > 0
+                ? initialAlarmTimestamp
+                : null,
+        }
+        : null,
+});
+
+if (monitoring) {
+    requestCameraAccess()
+        .then(() => {
+            if (!alarmActive) {
+                startPolling();
+                startFrameUploads();
+            }
+        })
+        .catch(() => null);
 } else {
     stopPolling();
     stopFrameUploads();
