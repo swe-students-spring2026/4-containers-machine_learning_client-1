@@ -2,7 +2,9 @@
 
 import os
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+
+from pymongo.errors import PyMongoError
 
 os.environ["MONGO_URI"] = "mongodb://localhost:27017"
 
@@ -116,7 +118,7 @@ def test_process_frame_attentive_updates_timer(
 ):
     """Update the attentive timer and avoid flagging when attentive."""
     landmarker = Mock()
-    landmarker.detect_for_video.return_value = make_detection_result([])
+    landmarker.detect.return_value = make_detection_result([])
 
     event, last_attentive_at = client.process_frame(
         frame="frame",
@@ -144,7 +146,7 @@ def test_process_frame_flags_when_over_threshold(
 ):
     """Flag the event when inattention exceeds the threshold."""
     landmarker = Mock()
-    landmarker.detect_for_video.return_value = make_detection_result([])
+    landmarker.detect.return_value = make_detection_result([])
 
     event, last_attentive_at = client.process_frame(
         frame="frame",
@@ -158,27 +160,161 @@ def test_process_frame_flags_when_over_threshold(
     assert last_attentive_at == 190.0
 
 
-@patch("client.cv2.VideoCapture")
 @patch("client.create_landmarker", return_value=None)
-def test_run_monitoring_exits_when_no_landmarker(_mock_landmarker, mock_video):
+def test_run_monitoring_exits_when_no_landmarker(_mock_landmarker):
     """run_monitoring exits early if landmarker is None."""
-    mock_cap = Mock()
-    mock_cap.isOpened.return_value = True
-    mock_video.return_value = mock_cap
+    collection = Mock()
+    control_collection = Mock()
+    frame_collection = Mock()
+
+    client.run_monitoring(collection, control_collection, frame_collection)
+
+
+@patch("client.time.sleep")
+@patch("client.create_landmarker")
+@patch("client.is_monitoring_enabled", side_effect=[True, False])
+def test_run_monitoring_no_frames(
+    _mock_monitoring_enabled,
+    mock_create_landmarker,
+    _mock_sleep,
+):
+    """run_monitoring exits cleanly when no frames are available."""
+    landmarker = Mock()
+    mock_create_landmarker.return_value = landmarker
+
+    frame_collection = Mock()
+    frame_collection.find_one.side_effect = [None, None]
+
+    client.run_monitoring(Mock(), Mock(), frame_collection)
+
+    assert frame_collection.find_one.call_count >= 2
+    landmarker.close.assert_called_once()
+
+
+@patch("client.cv2.imdecode", return_value="decoded_frame")
+@patch("client.np.frombuffer", return_value="np_buffer")
+def test_decode_frame_valid_base64(_mock_frombuffer, _mock_imdecode):
+    """decode_frame returns an image for valid base64 payload."""
+    frame_document = {"image_base64": "aGVsbG8="}
+
+    decoded = client.decode_frame(frame_document)
+
+    assert decoded == "decoded_frame"
+
+
+def test_decode_frame_invalid_base64_returns_none():
+    """decode_frame returns None when base64 is invalid."""
+    frame_document = {"image_base64": "not-base64!!!"}
+
+    decoded = client.decode_frame(frame_document)
+
+    assert decoded is None
+
+
+@patch("client.process_frame", return_value=({"state": "attentive"}, 10.0))
+@patch("client.decode_frame", return_value="frame")
+@patch("client.is_monitoring_enabled", side_effect=[True, False])
+@patch("client.create_landmarker")
+def test_run_monitoring_inserts_event(
+    mock_create_landmarker,
+    _mock_enabled,
+    _mock_decode_frame,
+    _mock_process_frame,
+):
+    """run_monitoring processes one frame and inserts one event."""
+    landmarker = Mock()
+    mock_create_landmarker.return_value = landmarker
 
     collection = Mock()
     control_collection = Mock()
+    frame_collection = Mock()
+    frame_collection.find_one.side_effect = [
+        None,
+        {"_id": "frame1", "image_base64": "aGVsbG8="},
+    ]
 
-    client.run_monitoring(collection, control_collection)
+    client.run_monitoring(collection, control_collection, frame_collection)
 
-    mock_cap.release.assert_called_once()
+    collection.insert_one.assert_called_once_with({"state": "attentive"})
+    landmarker.close.assert_called_once()
 
 
-@patch("client.cv2.VideoCapture")
-def test_run_monitoring_camera_fail(mock_video):
-    """Ensure function exits if camera cant open."""
-    mock_cap = Mock()
-    mock_cap.isOpened.return_value = False
-    mock_video.return_value = mock_cap
+@patch("client.time.sleep", side_effect=KeyboardInterrupt)
+@patch("client.is_monitoring_enabled", return_value=False)
+@patch("client.MongoClient")
+def test_main_stops_cleanly_on_keyboard_interrupt(
+    mock_mongo_client,
+    _mock_enabled,
+    _mock_sleep,
+):
+    """main returns 0 and closes mongo client on interruption."""
+    mongo_instance = MagicMock()
+    db = MagicMock()
+    db.__getitem__ = MagicMock(return_value=Mock())
+    mongo_instance.__getitem__.return_value = db
+    mock_mongo_client.return_value = mongo_instance
 
-    client.run_monitoring(Mock(), Mock())
+    result = client.main()
+
+    assert result == 0
+    mongo_instance.close.assert_called_once()
+
+
+@patch("client.time.sleep", side_effect=KeyboardInterrupt)
+@patch("client.run_monitoring")
+@patch("client.is_monitoring_enabled", return_value=True)
+@patch("client.MongoClient")
+def test_main_calls_run_monitoring_when_enabled(
+    mock_mongo_client,
+    _mock_enabled,
+    mock_run_monitoring,
+    _mock_sleep,
+):
+    """main calls run_monitoring when monitoring is enabled."""
+    mongo_instance = MagicMock()
+    db = MagicMock()
+    event_collection = Mock()
+    control_collection = Mock()
+    frame_collection = Mock()
+    db.__getitem__.side_effect = [
+        event_collection,
+        control_collection,
+        frame_collection,
+    ]
+    mongo_instance.__getitem__.return_value = db
+    mock_mongo_client.return_value = mongo_instance
+
+    client.main()
+
+    mock_run_monitoring.assert_called_once_with(
+        event_collection,
+        control_collection,
+        frame_collection,
+    )
+
+
+@patch("client.decode_frame", return_value="frame")
+@patch("client.process_frame", return_value=({"state": "attentive"}, 10.0))
+@patch("client.is_monitoring_enabled", side_effect=[True, False])
+@patch("client.create_landmarker")
+def test_run_monitoring_handles_insert_error(
+    mock_create_landmarker,
+    _mock_enabled,
+    _mock_process_frame,
+    _mock_decode,
+):
+    """run_monitoring handles insert exceptions and still closes resources."""
+    landmarker = Mock()
+    mock_create_landmarker.return_value = landmarker
+
+    collection = Mock()
+    collection.insert_one.side_effect = PyMongoError("write failed")
+    frame_collection = Mock()
+    frame_collection.find_one.side_effect = [
+        {"_id": "frame1", "image_base64": "aGVsbG8="},
+        None,
+    ]
+
+    client.run_monitoring(collection, Mock(), frame_collection)
+
+    landmarker.close.assert_called_once()

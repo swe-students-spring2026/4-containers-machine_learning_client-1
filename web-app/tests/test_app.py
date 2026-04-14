@@ -76,3 +76,32 @@ def test_events_returns_flagged_events(client):
     assert data["events"][0]["timestamp"] == 123.45
     assert data["events"][0]["state"] == "looking_away"
     assert data["events"][0]["flag"] is True
+
+
+def test_ingest_frame_missing_image_returns_400(client):
+    """Test that missing frame payload returns 400."""
+    response = client.post("/frames", json={})
+
+    assert response.status_code == 400
+    assert response.is_json
+    assert response.get_json()["error"] == "missing image_base64"
+
+
+def test_ingest_frame_invalid_base64_returns_400(client):
+    """Test that invalid base64 frame payload returns 400."""
+    response = client.post("/frames", json={"image_base64": "not-base64!"})
+
+    assert response.status_code == 400
+    assert response.is_json
+    assert response.get_json()["error"] == "invalid image_base64"
+
+
+def test_ingest_frame_stores_document(client):
+    """Test that valid frame payload is stored."""
+    with patch("app.frame_collection.insert_one") as mock_insert:
+        response = client.post("/frames", json={"image_base64": "aGVsbG8="})
+
+    assert response.status_code == 201
+    assert response.is_json
+    assert response.get_json()["ok"] is True
+    mock_insert.assert_called_once()

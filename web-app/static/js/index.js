@@ -1,9 +1,11 @@
 const toggleButton = document.getElementById("toggle-button");
 const popupStack = document.getElementById("popup-stack");
 const cameraPreview = document.getElementById("camera-preview");
+const captureCanvas = document.createElement("canvas");
 
 let monitoring = document.body.dataset.monitoring === "true";
 let pollTimer = null;
+let frameTimer = null;
 let sessionStartTimestamp = document.body.dataset.monitoringSince || null;
 let lastSeenId = "";
 let mediaStream = null;
@@ -39,6 +41,7 @@ async function requestCameraAccess() {
     }
     mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
     cameraPreview.srcObject = mediaStream;
+    await cameraPreview.play();
 }
 
 function releaseCameraAccess() {
@@ -94,10 +97,70 @@ function stopPolling() {
     pollTimer = null;
 }
 
+function captureFrameBase64() {
+    if (cameraPreview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        return "";
+    }
+
+    const width = cameraPreview.videoWidth;
+    const height = cameraPreview.videoHeight;
+    if (!width || !height) {
+        return "";
+    }
+
+    captureCanvas.width = width;
+    captureCanvas.height = height;
+    const context = captureCanvas.getContext("2d");
+    if (!context) {
+        return "";
+    }
+    context.drawImage(cameraPreview, 0, 0, width, height);
+    const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.8);
+    const parts = dataUrl.split(",");
+    return parts.length === 2 ? parts[1] : "";
+}
+
+async function uploadFrame() {
+    if (!monitoring || !mediaStream) {
+        return;
+    }
+
+    const imageBase64 = captureFrameBase64();
+    if (!imageBase64) {
+        return;
+    }
+
+    await fetch("/frames", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_base64: imageBase64 }),
+    });
+}
+
+function startFrameUploads() {
+    if (frameTimer) {
+        window.clearInterval(frameTimer);
+    }
+
+    frameTimer = window.setInterval(() => {
+        uploadFrame().catch(() => null);
+    }, 1000);
+}
+
+function stopFrameUploads() {
+    if (!frameTimer) {
+        return;
+    }
+    window.clearInterval(frameTimer);
+    frameTimer = null;
+}
+
 if (monitoring) {
     requestCameraAccess().catch(() => null);
     startPolling();
+    startFrameUploads();
 } else {
     stopPolling();
+    stopFrameUploads();
     releaseCameraAccess();
 }
