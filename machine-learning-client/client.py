@@ -139,7 +139,6 @@ def run_monitoring(collection, control_collection, frame_collection):
             if frame is None:
                 continue
 
-
             event, last_attentive_at = process_frame(
                 frame, landmarker, last_attentive_at
             )

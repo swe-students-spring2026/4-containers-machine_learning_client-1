@@ -130,7 +130,9 @@ def ingest_frame():
     except (binascii.Error, ValueError):
         return jsonify({"error": "invalid image_base64"}), 400
 
-    frame_collection.insert_one({"timestamp": time.time(), "image_base64": image_base64})
+    frame_collection.insert_one(
+        {"timestamp": time.time(), "image_base64": image_base64}
+    )
     return jsonify({"ok": True}), 201
 
 
