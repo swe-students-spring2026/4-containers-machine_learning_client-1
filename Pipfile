@@ -6,6 +6,9 @@ name = "pypi"
 [packages]
 opencv-python = "*"
 mediapipe = "*"
+pymongo = "*"
+flask = "*"
+python-dotenv = "*"
 
 [dev-packages]
 
