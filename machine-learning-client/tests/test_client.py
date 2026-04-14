@@ -156,3 +156,27 @@ def test_process_frame_flags_when_over_threshold(
     assert event["state"] == "looking_away"
     assert event["flag"] is True
     assert last_attentive_at == 190.0
+
+@patch("client.cv2.VideoCapture")
+@patch("client.create_landmarker", return_value=None)
+def test_run_monitoring_exits_when_no_landmarker(_mock_landmarker, mock_video):
+    """run_monitoring exits early if landmarker is None."""
+    mock_cap = Mock()
+    mock_cap.isOpened.return_value = True
+    mock_video.return_value = mock_cap
+
+    collection = Mock()
+    control_collection = Mock()
+
+    client.run_monitoring(collection, control_collection)
+
+    mock_cap.release.assert_called_once()
+
+@patch("client.cv2.VideoCapture")
+def test_run_monitoring_camera_fail(mock_video):
+    """Ensure function exits if camera cant open."""
+    mock_cap = Mock()
+    mock_cap.isOpened.return_value = False
+    mock_video.return_value = mock_cap
+
+    client.run_monitoring(Mock(), Mock())
