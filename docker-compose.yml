@@ -15,8 +15,6 @@ services:
     container_name: machine-learning-client
     env_file:
       - .env
-    depends_on:
-      - mongo
   
   web-app:
     build: ./web-app
