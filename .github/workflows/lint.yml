@@ -28,9 +28,9 @@ jobs:
         run: |
           cd ${{ matrix.subdir }}
           if [ "${{ matrix.subdir }}" = "machine-learning-client" ]; then
-            python -m pylint --persistent=n --ignored-modules=cv2,mediapipe,mediapipe.tasks,mediapipe.tasks.python --generated-members=cv2.\*,mediapipe.\* **/*.py
+            PYTHONPATH=. python -m pylint --persistent=n --ignored-modules=cv2,mediapipe,mediapipe.tasks,mediapipe.tasks.python --generated-members=cv2.\*,mediapipe.\* **/*.py
           else
-            python -m pylint --persistent=n **/*.py
+            PYTHONPATH=. python -m pylint --persistent=n app.py tests
           fi
 
       - name: Format with black
