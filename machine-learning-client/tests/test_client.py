@@ -157,6 +157,7 @@ def test_process_frame_flags_when_over_threshold(
     assert event["flag"] is True
     assert last_attentive_at == 190.0
 
+
 @patch("client.cv2.VideoCapture")
 @patch("client.create_landmarker", return_value=None)
 def test_run_monitoring_exits_when_no_landmarker(_mock_landmarker, mock_video):
@@ -171,6 +172,7 @@ def test_run_monitoring_exits_when_no_landmarker(_mock_landmarker, mock_video):
     client.run_monitoring(collection, control_collection)
 
     mock_cap.release.assert_called_once()
+
 
 @patch("client.cv2.VideoCapture")
 def test_run_monitoring_camera_fail(mock_video):
