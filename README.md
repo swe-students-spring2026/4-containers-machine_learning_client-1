@@ -2,6 +2,19 @@
 ![ML Client CI](https://github.com/swe-students-spring2026/4-containers-machine_learning_client-1/actions/workflows/ml-client.yml/badge.svg)
 ![Web App CI](https://github.com/swe-students-spring2026/4-containers-machine_learning_client-1/actions/workflows/web-app.yml/badge.svg)
 
-# Containerized App Exercise
+# Face Detection Focus App 
 
-Build a containerized app that uses machine learning. See [instructions](./instructions.md) for details.
+## Team Members 
+[name]()<br>
+[name]()<br>
+[name]()<br>
+[name]()<br>
+[name]()<br>
+
+## Running The Software 
+
+### Configuration 
+
+### How To Run 
+
+## Project Board
