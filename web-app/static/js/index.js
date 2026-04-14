@@ -164,4 +164,3 @@ if (monitoring) {
     stopFrameUploads();
     releaseCameraAccess();
 }
-
