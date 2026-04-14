@@ -147,6 +147,14 @@ function startFrameUploads() {
     }, 1000);
 }
 
+function stopFrameUploads() {
+    if (!frameTimer) {
+        return;
+    }
+    window.clearInterval(frameTimer);
+    frameTimer = null;
+}
+
 if (monitoring) {
     requestCameraAccess().catch(() => null);
     startPolling();
@@ -157,10 +165,3 @@ if (monitoring) {
     releaseCameraAccess();
 }
 
-function stopFrameUploads() {
-    if (!frameTimer) {
-        return;
-    }
-    window.clearInterval(frameTimer);
-    frameTimer = null;
-}
