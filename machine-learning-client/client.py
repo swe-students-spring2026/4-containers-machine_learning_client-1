@@ -144,7 +144,7 @@ def run_monitoring(collection, control_collection, frame_collection):
         return
 
     last_attentive_at = time.monotonic()
-    latest_existing_frame = None
+    last_frame_id = None
     initialized_last_frame_id = False
     alarm_paused = False
 
@@ -200,7 +200,7 @@ def run_monitoring(collection, control_collection, frame_collection):
 
             elapsed = time.monotonic() - loop_started_at
             time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
-            
+
     except KeyboardInterrupt:
         print("Stopping client")
     finally:
