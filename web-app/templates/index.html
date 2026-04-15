@@ -20,6 +20,20 @@
                 {{ 'Stop' if monitoring else 'Start' }}
             </button>
         </form>
+
+        <!--Events-->
+        {% if events %}
+        {% for event in events %}
+            <div class="event">
+            <p><strong>ID:</strong> {{ event.id }}</p>
+            <p><strong>Timestamp:</strong> {{ event.timestamp }}</p>
+            <p><strong>State:</strong> {{ event.state }}</p>
+            <p><strong>Flag:</strong> {{ event.flag }}</p>
+            </div>
+        {% endfor %}
+        {% else %}
+        <p>No events found.</p>
+        {% endif %}
     </main>
 
     <section id="popup-stack" aria-live="assertive" aria-atomic="false"></section>
