@@ -1,6 +1,7 @@
 ![Lint-free](https://github.com/swe-students-spring2026/4-containers-machine_learning_client-1/actions/workflows/lint.yml/badge.svg)
 ![ML Client CI](https://github.com/swe-students-spring2026/4-containers-machine_learning_client-1/actions/workflows/ml-client.yml/badge.svg)
 ![Web App CI](https://github.com/swe-students-spring2026/4-containers-machine_learning_client-1/actions/workflows/web-app.yml/badge.svg)
+![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)
 
 # Face Detection Focus App 
 
@@ -92,15 +93,19 @@ python client.py
 ```
 
 ## API Endpoints
-- GET /: Main monitoring interface
-- POST /start: Start monitoring session
-- POST /stop: Stop monitoring session
-- GET /status: Get current monitoring status
-- POST /alarm/dismiss: Dismiss active alarm
-- GET /events: Get flagged attention events
-- GET /stats: Get global statistics
-- POST /frames: Ingest camera frames for processing
+- `GET /`: Main monitoring interface
+- `POST /start`: Start monitoring session
+- `POST /stop`: Stop monitoring session
+- `GET /status`: Get current monitoring status
+- `POST /alarm/dismiss`: Dismiss active alarm
+- `GET /events`: Get flagged attention events
+- `GET /stats`: Get global statistics
+- `POST /frames`: Ingest camera frames for processing
 
 ## Project Board
 
 [Project Board](https://github.com/orgs/swe-students-spring2026/projects/91)
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
