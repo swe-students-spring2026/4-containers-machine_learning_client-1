@@ -37,13 +37,15 @@ def build_alarm_payload(control):
 
     return {
         "active": bool(control.get("alarm_active")),
-        "event": {
-            "id": str(control["alarm_event_id"]),
-            "timestamp": control.get("alarm_triggered_at"),
-            "state": control.get("alarm_state", "unknown"),
-        }
-        if control.get("alarm_active") and control.get("alarm_event_id") is not None
-        else None,
+        "event": (
+            {
+                "id": str(control["alarm_event_id"]),
+                "timestamp": control.get("alarm_triggered_at"),
+                "state": control.get("alarm_state", "unknown"),
+            }
+            if control.get("alarm_active") and control.get("alarm_event_id") is not None
+            else None
+        ),
     }
 
 

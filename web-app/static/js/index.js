@@ -41,6 +41,10 @@ function updateAlarmUi(alarm) {
 }
 
 function createPopup(event) {
+    if(!popupStack) {
+        return;
+    }
+
     const popup = document.createElement("article");
     popup.className = "popup";
 
@@ -186,6 +190,10 @@ function stopFrameUploads() {
 }
 
 async function syncStatus() {
+    if(popupStack) {
+        popupStack.replaceChildren();
+    }
+
     const response = await fetch("/status");
     if (!response.ok) {
         return;
@@ -215,6 +223,10 @@ async function syncStatus() {
 }
 
 async function dismissAlarm() {
+    if (popupStack) {
+        popupStack.replaceChildren();
+    }
+
     dismissAlarmButton.disabled = true;
     try {
         const response = await fetch("/alarm/dismiss", { method: "POST" });
