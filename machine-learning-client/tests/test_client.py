@@ -401,7 +401,9 @@ def test_run_monitoring_waits_while_alarm_active(
 @patch("client.activate_alarm")
 @patch("client.decode_frame", return_value="frame")
 @patch("client.is_alarm_active", return_value=False)
-@patch("client.process_frame", return_value=({"state": "looking_away", "flag": True}, 10.0))
+@patch(
+    "client.process_frame", return_value=({"state": "looking_away", "flag": True}, 10.0)
+)
 @patch("client.is_monitoring_enabled", side_effect=[True, False])
 @patch("client.create_landmarker")
 def test_run_monitoring_activates_alarm_for_first_flag(

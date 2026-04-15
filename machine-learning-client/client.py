@@ -183,7 +183,9 @@ def run_monitoring(collection, control_collection, frame_collection):
             try:
                 inserted_event = collection.insert_one(event)
                 if event.get("flag"):
-                    activate_alarm(control_collection, inserted_event.inserted_id, event)
+                    activate_alarm(
+                        control_collection, inserted_event.inserted_id, event
+                    )
             except PyMongoError as exc:
                 print(f"MongoDB insert failed: {exc}", file=sys.stderr)
             print(event)
