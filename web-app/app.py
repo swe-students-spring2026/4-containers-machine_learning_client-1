@@ -204,11 +204,18 @@ def get_stats():
     if not sessions:
         return jsonify({"sessions_count": 0})
     
+    last_session = session_collection.find_one(sort=[("_id", -1)])
+    
     return jsonify({
         "sessions_count": len(sessions),
         "avg_threshold": average_without_outliers([s["flag_threshold_sec"] for s in sessions]),
         "avg_alarm_count": average_without_outliers([s["alarm_count"] for s in sessions]),
         "avg_duration_sec": average_without_outliers([s["duration_sec"] for s in sessions]),
+        "last_session": {
+            "flag_threshold_sec": last_session["flag_threshold_sec"],
+            "alarm_count": last_session["alarm_count"],
+            "duration_sec": last_session["duration_sec"],
+        }
     })
 
 

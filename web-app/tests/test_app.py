@@ -150,6 +150,25 @@ def test_stats_no_sessions(client):
     assert response.get_json()["sessions_count"] == 0
 
 
+def test_stats_includes_last_session(client):
+    """Test /stats includes the most recent session data."""
+    fake_sessions = [
+        {"flag_threshold_sec": 5.0, "alarm_count": 2, "duration_sec": 60.0},
+        {"flag_threshold_sec": 5.0, "alarm_count": 4, "duration_sec": 120.0},
+    ]
+    with (
+        patch("app.session_collection.find", return_value=fake_sessions),
+        patch("app.session_collection.find_one", return_value=fake_sessions[-1]),
+    ):
+        response = client.get("/stats")
+
+    data = response.get_json()
+    assert "last_session" in data
+    assert data["last_session"]["flag_threshold_sec"] == 5.0
+    assert data["last_session"]["alarm_count"] == 4
+    assert data["last_session"]["duration_sec"] == 120.0
+
+
 def test_stats_returns_averages(client):
     """Test /stats computes averages across sessions."""
     fake_sessions = [
