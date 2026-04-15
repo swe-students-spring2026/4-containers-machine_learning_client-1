@@ -145,7 +145,6 @@ def run_monitoring(collection, control_collection, frame_collection):
 
     last_attentive_at = time.monotonic()
     last_frame_id = None
-    initialized_last_frame_id = False
     alarm_paused = False
 
     try:
@@ -159,14 +158,10 @@ def run_monitoring(collection, control_collection, frame_collection):
             if alarm_paused:
                 last_attentive_at = time.monotonic()
                 alarm_paused = False
-            if not initialized_last_frame_id:
+            if last_frame_id is None:
                 latest_existing_frame = frame_collection.find_one(sort=[("_id", -1)])
-                last_frame_id = (
-                    latest_existing_frame.get("_id")
-                    if latest_existing_frame is not None
-                    else None
-                )
-                initialized_last_frame_id = True
+                if latest_existing_frame is not None:
+                    last_frame_id = latest_existing_frame.get("_id")
 
             frame_query = {}
             if last_frame_id is not None:
