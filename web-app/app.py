@@ -6,6 +6,7 @@ import base64
 import binascii
 import os
 import time
+import statistics
 
 from bson import ObjectId
 from flask import Flask, jsonify, redirect, render_template, request, url_for
@@ -197,6 +198,20 @@ def flagged_events():
     return jsonify({"events": events})
 
 
+@app.get("/stats")
+def get_stats():
+    sessions = list(session_collection.find())
+    if not sessions:
+        return jsonify({"sessions_count": 0})
+    
+    return jsonify({
+        "sessions_count": len(sessions),
+        "avg_threshold": average_without_outliers([s["flag_threshold_sec"] for s in sessions]),
+        "avg_alarm_count": average_without_outliers([s["alarm_count"] for s in sessions]),
+        "avg_duration_sec": average_without_outliers([s["duration_sec"] for s in sessions]),
+    })
+
+
 @app.post("/frames")
 def ingest_frame():
     """Store one frontend-captured camera frame for backend processing."""
@@ -215,6 +230,16 @@ def ingest_frame():
         {"timestamp": time.time(), "image_base64": image_base64}
     )
     return jsonify({"ok": True}), 201
+
+
+def average_without_outliers(values):
+    """Helper function to filter outliers and compute the average"""
+    if len(values) < 2:
+        return values[0] if values else None
+    mean = statistics.mean(values)
+    stdev = statistics.stdev(values)
+    filtered = [v for v in values if abs(v - mean) <= stdev]
+    return statistics.mean(filtered) if filtered else mean
 
 
 if __name__ == "__main__":

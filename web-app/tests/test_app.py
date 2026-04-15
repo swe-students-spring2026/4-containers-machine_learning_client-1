@@ -47,11 +47,15 @@ def test_start_monitoring_redirects(client):
 
 def test_stop_monitoring_redirects(client):
     """Test that stop monitoring redirects to home page"""
-    with patch("app.set_monitoring_status") as mock_set_status:
+    with (
+        patch("app.set_monitoring_status") as mock_set_status,
+        patch("app.save_session_summary") as mock_save,
+    ):
         response = client.post("/stop")
 
     assert response.status_code == 302
     mock_set_status.assert_called_once_with("stopped")
+    mock_save.assert_called_once()
 
 
 def test_dismiss_alarm_clears_alarm_state(client):
@@ -135,3 +139,36 @@ def test_ingest_frame_stores_document(client):
     assert response.is_json
     assert response.get_json()["ok"] is True
     mock_insert.assert_called_once()
+
+
+def test_stats_no_sessions(client):
+    """Test /stats returns sessions_count 0 when collection is empty."""
+    with patch("app.session_collection.find", return_value=[]):
+        response = client.get("/stats")
+
+    assert response.status_code == 200
+    assert response.get_json()["sessions_count"] == 0
+
+
+def test_stats_returns_averages(client):
+    """Test /stats computes averages across sessions."""
+    fake_sessions = [
+        {"flag_threshold_sec": 5.0, "alarm_count": 2, "duration_sec": 60.0},
+        {"flag_threshold_sec": 5.0, "alarm_count": 4, "duration_sec": 120.0},
+    ]
+    with patch("app.session_collection.find", return_value=fake_sessions):
+        response = client.get("/stats")
+
+    data = response.get_json()
+    assert data["sessions_count"] == 2
+    assert data["avg_threshold"] == 5.0
+    assert data["avg_alarm_count"] == 3.0
+    assert data["avg_duration_sec"] == 90.0
+
+
+def test_average_without_outliers_removes_outlier():
+    """Test that values beyond 1 stdev are excluded."""
+    from app import average_without_outliers
+    # 100 is an outlier relative to 1,2,3
+    result = average_without_outliers([1.0, 2.0, 3.0, 100.0])
+    assert result < 10.0
