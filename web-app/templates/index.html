@@ -9,6 +9,9 @@
 <body
     data-monitoring="{{ 'true' if monitoring else 'false' }}"
     data-monitoring-since="{{ monitoring_since }}"
+    data-alarm-active="{{ 'true' if alarm.active else 'false' }}"
+    data-alarm-state="{{ alarm.event.state if alarm.event else '' }}"
+    data-alarm-timestamp="{{ alarm.event.timestamp if alarm.event else '' }}"
 >
     <main>
         <form method="post" action="{{ url_for('stop_monitoring' if monitoring else 'start_monitoring') }}">
@@ -22,8 +25,35 @@
         </form>
     </main>
 
-    <section id="popup-stack" aria-live="assertive" aria-atomic="false"></section>
+    <section
+        id="alarm-modal"
+        class="{{ 'active' if alarm.active else '' }}"
+        aria-live="assertive"
+        aria-atomic="true"
+    >
+        <article class="popup" role="alertdialog" aria-modal="true" aria-labelledby="alarm-title">
+            <h2 id="alarm-title">Attention Flag</h2>
+            <p id="alarm-message">
+                {% if alarm.active and alarm.event %}
+                State: {{ alarm.event.state }}. Time:
+                <time data-alarm-timestamp="{{ alarm.event.timestamp }}">{{ alarm.event.timestamp }}</time>.
+                {% else %}
+                Attention monitoring is active.
+                {% endif %}
+            </p>
+            <button
+                id="dismiss-alarm-button"
+                type="button"
+                {% if not alarm.active %}hidden{% endif %}
+            >
+                Turn Off Alarm
+            </button>
+        </article>
+    </section>
     <video id="camera-preview" autoplay playsinline muted></video>
+    <audio id="alarm-audio" preload="auto" loop>
+        <source src="{{ url_for('static', filename='audio/TF041.WAV') }}" type="audio/wav">
+    </audio>
 
     <script src="{{ url_for('static', filename='js/index.js') }}"></script>
 </body>

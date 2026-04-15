@@ -32,6 +32,23 @@ def get_monitoring_control():
     return control_collection.find_one({"_id": "monitoring"}) or {}
 
 
+def build_alarm_payload(control):
+    """Return the serialized alarm state for API responses."""
+
+    return {
+        "active": bool(control.get("alarm_active")),
+        "event": (
+            {
+                "id": str(control["alarm_event_id"]),
+                "timestamp": control.get("alarm_triggered_at"),
+                "state": control.get("alarm_state", "unknown"),
+            }
+            if control.get("alarm_active") and control.get("alarm_event_id") is not None
+            else None
+        ),
+    }
+
+
 @app.route("/")
 def home():
     """Render the minimal control interface."""
@@ -43,6 +60,7 @@ def home():
         "index.html",
         monitoring=monitoring,
         monitoring_since=monitoring_since,
+        alarm=build_alarm_payload(control),
     )
 
 
@@ -52,7 +70,16 @@ def set_monitoring_status(status):
     updated_at = time.time()
     control_collection.update_one(
         {"_id": "monitoring"},
-        {"$set": {"status": status, "updated_at": updated_at}},
+        {
+            "$set": {
+                "status": status,
+                "updated_at": updated_at,
+                "alarm_active": False,
+                "alarm_event_id": None,
+                "alarm_state": None,
+                "alarm_triggered_at": None,
+            }
+        },
         upsert=True,
     )
     return updated_at
@@ -83,6 +110,36 @@ def get_status():
         {
             "monitoring": control.get("status") == "running",
             "updated_at": control.get("updated_at"),
+            "alarm": build_alarm_payload(control),
+        }
+    )
+
+
+@app.post("/alarm/dismiss")
+def dismiss_alarm():
+    """Clear the active alarm and allow monitoring to resume."""
+
+    updated_at = time.time()
+    control_collection.update_one(
+        {"_id": "monitoring"},
+        {
+            "$set": {
+                "alarm_active": False,
+                "alarm_event_id": None,
+                "alarm_state": None,
+                "alarm_triggered_at": None,
+                "updated_at": updated_at,
+            }
+        },
+        upsert=True,
+    )
+    control = get_monitoring_control()
+    return jsonify(
+        {
+            "ok": True,
+            "monitoring": control.get("status") == "running",
+            "updated_at": control.get("updated_at"),
+            "alarm": build_alarm_payload(control),
         }
     )
 
