@@ -217,6 +217,8 @@ def stop_monitoring():
             time.sleep(0.2)
 
         session_stats = compute_session_attention(events)
+        print("EVENTS:", events, flush=True)
+        print("SESSION_STATS:", session_stats, flush=True)
         if session_stats is not None:
             update_global_stats(session_stats)
 

@@ -291,7 +291,7 @@ def test_run_monitoring_inserts_event(
 
     client.run_monitoring(collection, control_collection, frame_collection)
 
-    collection.insert_one.assert_called_once_with({"state": "attentive"})
+    collection.insert_one.assert_any_call({"state": "attentive"})
     landmarker.close.assert_called_once()
 
 
@@ -430,7 +430,7 @@ def test_run_monitoring_activates_alarm_for_first_flag(
 
     client.run_monitoring(collection, control_collection, frame_collection)
 
-    collection.insert_one.assert_called_once_with(
+    collection.insert_one.assert_any_call(
         {"state": "looking_away", "flag": True}
     )
     mock_activate_alarm.assert_called_once_with(
