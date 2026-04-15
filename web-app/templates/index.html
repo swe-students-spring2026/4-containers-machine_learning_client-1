@@ -15,6 +15,7 @@
     data-just-stopped="{{ 'true' if request.args.get('stopped') == '1' else 'false' }}"
 >
     <main>
+        <video id="camera-preview" autoplay playsinline muted></video>
         <form method="post" action="{{ url_for('stop_monitoring' if monitoring else 'start_monitoring') }}">
             <button
                 id="toggle-button"
@@ -81,7 +82,6 @@
             </button>
         </article>
     </section>
-    <video id="camera-preview" autoplay playsinline muted></video>
     <audio id="alarm-audio" preload="auto" loop>
         <source src="{{ url_for('static', filename='audio/TF041.WAV') }}" type="audio/wav">
     </audio>

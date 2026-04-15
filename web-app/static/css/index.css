@@ -43,8 +43,9 @@ body.alarm-active::before {
 
 main {
     width: 100%;
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     padding: 24px;
     position: relative;
     z-index: 200;
@@ -121,9 +122,6 @@ button:disabled {
 }
 
 video {
-    position: fixed;
-    top: 24px;
-    right: 24px;
     width: 360px;
     height: 270px;
     object-fit: cover;
@@ -132,7 +130,7 @@ video {
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
     background: #000;
     opacity: 1;
-    z-index: 100;
+    margin-bottom: 24px;
     pointer-events: none;
 }
 
