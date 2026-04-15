@@ -34,8 +34,8 @@ NOSE_TIP_INDEX = 1
 LEFT_CHEEK_INDEX = 234
 RIGHT_CHEEK_INDEX = 454
 
-current_session_id = None # pylint: disable=invalid-name
-alarm_active = False # pylint: disable=invalid-name
+current_session_id = None  # pylint: disable=invalid-name
+alarm_active = False  # pylint: disable=invalid-name
 
 
 def is_monitoring_enabled(control_collection):
@@ -140,6 +140,7 @@ def decode_frame(frame_document):
     np_buffer = np.frombuffer(image_bytes, dtype=np.uint8)
     return cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
 
+
 def save_event(collection, label):
     """Save a session event to MongoDB"""
     global current_session_id
@@ -150,7 +151,7 @@ def save_event(collection, label):
     event_document = {
         "session_id": current_session_id,
         "timestamp": datetime.now(timezone.utc),
-        "label": label, 
+        "label": label,
     }
 
     try:
@@ -158,6 +159,7 @@ def save_event(collection, label):
     except PyMongoError as exc:
         print(f"MongoDB insert failed: {exc}", file=sys.stderr)
         print(event_document)
+
 
 def run_monitoring(collection, control_collection, frame_collection):
     """Process frontend-uploaded frames and write events while enabled."""

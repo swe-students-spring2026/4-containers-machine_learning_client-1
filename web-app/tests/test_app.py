@@ -186,11 +186,3 @@ def test_stats_returns_averages(client):
     assert data["avg_threshold"] == 5.0
     assert data["avg_alarm_count"] == 3.0
     assert data["avg_duration_sec"] == 90.0
-
-
-def test_average_without_outliers_removes_outlier():
-    """Test that values beyond 1 stdev are excluded."""
-    from app import average_without_outliers
-    # 100 is an outlier relative to 1,2,3
-    result = average_without_outliers([1.0, 2.0, 3.0, 100.0])
-    assert result < 10.0

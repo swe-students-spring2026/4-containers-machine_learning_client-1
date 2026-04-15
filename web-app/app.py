@@ -132,9 +132,7 @@ def compute_session_attention(events):
     total_duration = max(0.0, end_time - start_time)
     total_alarm_duration = max(0.0, min(total_alarm_duration, total_duration))
     attention_duration = total_duration - total_alarm_duration
-    attention_ratio = (
-        attention_duration / total_duration if total_duration > 0 else 0.0
-    )
+    attention_ratio = attention_duration / total_duration if total_duration > 0 else 0.0
 
     return {
         "duration_sec": total_duration,
@@ -160,7 +158,9 @@ def update_global_stats(session_stats):
     global_stats["session_count"] += 1
     global_stats["total_duration_sec"] += session_stats["duration_sec"]
     global_stats["total_alarm_duration_sec"] += session_stats["alarm_duration_sec"]
-    global_stats["total_attention_duration_sec"] += session_stats["attention_duration_sec"]
+    global_stats["total_attention_duration_sec"] += session_stats[
+        "attention_duration_sec"
+    ]
     global_stats["total_attention_ratio"] += session_stats["attention_ratio"]
     global_stats["total_alert_count"] += session_stats["alert_count"]
 
@@ -168,12 +168,8 @@ def update_global_stats(session_stats):
     global_stats["avg_attention_duration_sec"] = (
         global_stats["total_attention_duration_sec"] / count
     )
-    global_stats["avg_attention_ratio"] = (
-        global_stats["total_attention_ratio"] / count
-    )
-    global_stats["avg_alert_count"] = (
-        global_stats["total_alert_count"] / count
-    )
+    global_stats["avg_attention_ratio"] = global_stats["total_attention_ratio"] / count
+    global_stats["avg_alert_count"] = global_stats["total_alert_count"] / count
 
     global_stats_collection.replace_one(
         {"_id": "global"},
