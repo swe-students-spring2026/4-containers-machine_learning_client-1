@@ -13,7 +13,6 @@
     data-alarm-state="{{ alarm.event.state if alarm.event else '' }}"
     data-alarm-timestamp="{{ alarm.event.timestamp if alarm.event else '' }}"
 >
-    <div id="popup-stack" aria-live="assertive" aria-atomic="true"></div>
     <main>
         <form method="post" action="{{ url_for('stop_monitoring' if monitoring else 'start_monitoring') }}">
             <button

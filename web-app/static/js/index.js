@@ -1,4 +1,3 @@
-const popupStack = document.getElementById("popup-stack");
 const popupModal = document.getElementById("alarm-modal");
 const alarmMessage = document.getElementById("alarm-message");
 const dismissAlarmButton = document.getElementById("dismiss-alarm-button");
@@ -38,31 +37,6 @@ function updateAlarmUi(alarm) {
         alarmAudio.pause();
         alarmAudio.currentTime = 0;
     }
-}
-
-function createPopup(event) {
-    if(!popupStack) {
-        return;
-    }
-
-    const popup = document.createElement("article");
-    popup.className = "popup";
-
-    const heading = document.createElement("h2");
-    heading.textContent = "Attention Flag";
-
-    const message = document.createElement("p");
-    message.textContent = `State: ${event.state}. Time: ${formatTimestamp(event.timestamp)}.`;
-
-    const closeButton = document.createElement("button");
-    closeButton.type = "button";
-    closeButton.textContent = "Turn Off Alarm";
-    closeButton.addEventListener("click", () => {
-        dismissAlarm().catch(() => null);
-    });
-
-    popup.replaceChildren(heading, message, closeButton);
-    popupStack.replaceChildren(popup);
 }
 
 async function requestCameraAccess() {
@@ -107,10 +81,6 @@ async function fetchFlaggedEvents() {
     }
 
     const payload = await response.json();
-    for (const event of payload.events) {
-        lastSeenId = event.id;
-        createPopup(event);
-    }
 }
 
 function startPolling() {
@@ -190,10 +160,6 @@ function stopFrameUploads() {
 }
 
 async function syncStatus() {
-    if(popupStack) {
-        popupStack.replaceChildren();
-    }
-
     const response = await fetch("/status");
     if (!response.ok) {
         return;
@@ -205,7 +171,6 @@ async function syncStatus() {
     updateAlarmUi(payload.alarm);
 
     if (!monitoring) {
-        popupStack.replaceChildren();
         stopPolling();
         stopFrameUploads();
         releaseCameraAccess();
@@ -223,10 +188,6 @@ async function syncStatus() {
 }
 
 async function dismissAlarm() {
-    if (popupStack) {
-        popupStack.replaceChildren();
-    }
-
     dismissAlarmButton.disabled = true;
     try {
         const response = await fetch("/alarm/dismiss", { method: "POST" });
@@ -236,7 +197,6 @@ async function dismissAlarm() {
         const payload = await response.json();
         monitoring = Boolean(payload.monitoring);
         updateAlarmUi(payload.alarm);
-        popupStack.replaceChildren();
         if (monitoring) {
             await requestCameraAccess();
             startPolling();
