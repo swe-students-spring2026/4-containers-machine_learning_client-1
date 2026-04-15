@@ -1,4 +1,5 @@
 """Test Cases For Web App"""
+
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -216,6 +217,47 @@ def test_stop_monitoring_skips_update_when_no_session_start(client):
     with (
         patch("app.get_monitoring_control", return_value={}),
         patch("app.set_monitoring_status") as mock_set_status,
+        patch("app.update_global_stats") as mock_update,
+    ):
+        response = client.post("/stop")
+
+    assert response.status_code == 302
+    mock_set_status.assert_called_once_with("stopped")
+    mock_update.assert_not_called()
+
+
+def test_compute_session_attention_returns_none_without_end():
+    """Test compute_session_attention returns None when end is missing."""
+    events = [
+        {
+            "label": "start",
+            "timestamp": 100.0,
+        }
+    ]
+
+    result = app.compute_session_attention(events)
+
+    assert result is None
+
+
+def test_stop_monitoring_skips_update_when_session_stats_none(client):
+    """Test stop_monitoring does not update globals when session stats are None."""
+    fake_control = {
+        "session_start_at": 100.0,
+    }
+    fake_events = [
+        {
+            "label": "start",
+            "session_id": "abc",
+            "timestamp": 100.0,
+        }
+    ]
+
+    with (
+        patch("app.get_monitoring_control", return_value=fake_control),
+        patch("app.set_monitoring_status") as mock_set_status,
+        patch("app.event_collection.find", return_value=fake_events),
+        patch("app.compute_session_attention", return_value=None),
         patch("app.update_global_stats") as mock_update,
     ):
         response = client.post("/stop")
