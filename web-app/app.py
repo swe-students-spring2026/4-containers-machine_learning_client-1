@@ -21,6 +21,124 @@ frame_collection = db[os.getenv("FRAME_COLLECTION", "attention_frames")]
 global_stats_collection = db[os.getenv("GLOBAL_STATS_COLLECTION", "global_stats")]
 
 
+def get_env_float(name, default):
+    """Read a float from the environment with a safe default."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return float(default)
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def get_env_int(name, default):
+    """Read an int from the environment with a safe default."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return int(default)
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def build_global_stats_defaults():
+    """Return default global stats seeded from environment values."""
+
+    return {
+        "_id": "global",
+        "session_count": max(0, get_env_int("GLOBAL_STATS_SESSION_COUNT", 0)),
+        "total_duration_sec": max(
+            0.0, get_env_float("GLOBAL_STATS_TOTAL_DURATION_SEC", 0.0)
+        ),
+        "total_alarm_duration_sec": max(
+            0.0, get_env_float("GLOBAL_STATS_TOTAL_ALARM_DURATION_SEC", 0.0)
+        ),
+        "total_attention_duration_sec": max(
+            0.0, get_env_float("GLOBAL_STATS_TOTAL_ATTENTION_DURATION_SEC", 0.0)
+        ),
+        "total_attention_ratio": max(
+            0.0, get_env_float("GLOBAL_STATS_TOTAL_ATTENTION_RATIO", 0.0)
+        ),
+        "total_alert_count": max(0, get_env_int("GLOBAL_STATS_TOTAL_ALERT_COUNT", 0)),
+    }
+
+
+def build_stats_response(stats):
+    """Return a unified stats payload for API consumers."""
+
+    default_last_session = {
+        "flag_threshold_sec": get_env_float(
+            "FLAG_THRESHOLD_SEC",
+            0.0,
+        ),
+        "focused_duration_sec": 0.0,
+        "alarm_count": 0,
+        "duration_sec": 0.0,
+    }
+
+    if not stats:
+        return {
+            "session_count": 0,
+            "sessions_count": 0,
+            "avg_attention_duration_sec": 0.0,
+            "avg_attention_ratio": 0.0,
+            "avg_alert_count": 0.0,
+            "avg_threshold": get_env_float(
+                "GLOBAL_AVG_THRESHOLD_SEC",
+                get_env_float("FLAG_THRESHOLD_SEC", 0.0),
+            ),
+            "avg_alarm_count": get_env_float("GLOBAL_AVG_ALARM_COUNT", 0.0),
+            "avg_duration_sec": get_env_float("GLOBAL_AVG_DURATION_SEC", 0.0),
+            "last_session": default_last_session,
+        }
+
+    session_count = int(stats.get("session_count", 0) or 0)
+    avg_attention_duration_sec = float(stats.get("avg_attention_duration_sec", 0.0) or 0.0)
+    avg_attention_ratio = float(stats.get("avg_attention_ratio", 0.0) or 0.0)
+    avg_alert_count = float(stats.get("avg_alert_count", 0.0) or 0.0)
+    last_session = stats.get("last_session") or default_last_session
+
+    avg_duration_sec = (
+        float(stats.get("total_duration_sec", 0.0) or 0.0) / session_count
+        if session_count > 0
+        else 0.0
+    )
+
+    return {
+        "session_count": session_count,
+        "sessions_count": session_count,
+        "avg_attention_duration_sec": avg_attention_duration_sec,
+        "avg_attention_ratio": avg_attention_ratio,
+        "avg_alert_count": avg_alert_count,
+        "avg_threshold": get_env_float(
+            "GLOBAL_AVG_THRESHOLD_SEC",
+            get_env_float("FLAG_THRESHOLD_SEC", 0.0),
+        ),
+        "avg_alarm_count": avg_alert_count,
+        "avg_duration_sec": avg_duration_sec,
+        "last_session": {
+            "flag_threshold_sec": float(
+                last_session.get(
+                    "flag_threshold_sec",
+                    default_last_session["flag_threshold_sec"],
+                )
+            ),
+            "focused_duration_sec": float(
+                last_session.get(
+                    "focused_duration_sec",
+                    default_last_session["focused_duration_sec"],
+                )
+            ),
+            "alarm_count": int(last_session.get("alarm_count", 0) or 0),
+            "duration_sec": float(last_session.get("duration_sec", 0.0) or 0.0),
+        },
+    }
+
+
 def is_monitoring_enabled():
     """Return whether monitoring is currently enabled."""
 
@@ -143,17 +261,24 @@ def compute_session_attention(events):
     }
 
 
+def build_fallback_session_stats(session_start_at):
+    """Build minimal session stats when labeled events are not yet available."""
+
+    start_ts = to_seconds(session_start_at)
+    end_ts = to_seconds(datetime.now(timezone.utc))
+    duration_sec = max(0.0, end_ts - start_ts)
+    return {
+        "duration_sec": duration_sec,
+        "alarm_duration_sec": 0.0,
+        "attention_duration_sec": duration_sec,
+        "attention_ratio": 1.0 if duration_sec > 0 else 0.0,
+        "alert_count": 0,
+    }
+
+
 def update_global_stats(session_stats):
     """Update the global aggregate stats document."""
-    global_stats = global_stats_collection.find_one({"_id": "global"}) or {
-        "_id": "global",
-        "session_count": 0,
-        "total_duration_sec": 0.0,
-        "total_alarm_duration_sec": 0.0,
-        "total_attention_duration_sec": 0.0,
-        "total_attention_ratio": 0.0,
-        "total_alert_count": 0,
-    }
+    global_stats = global_stats_collection.find_one({"_id": "global"}) or build_global_stats_defaults()
 
     global_stats["session_count"] += 1
     global_stats["total_duration_sec"] += session_stats["duration_sec"]
@@ -170,6 +295,14 @@ def update_global_stats(session_stats):
     )
     global_stats["avg_attention_ratio"] = global_stats["total_attention_ratio"] / count
     global_stats["avg_alert_count"] = global_stats["total_alert_count"] / count
+    global_stats["last_session"] = {
+        "flag_threshold_sec": get_env_float("FLAG_THRESHOLD_SEC", 0.0),
+        "focused_duration_sec": float(
+            session_stats.get("attention_duration_sec", 0.0) or 0.0
+        ),
+        "alarm_count": int(session_stats.get("alert_count", 0) or 0),
+        "duration_sec": float(session_stats.get("duration_sec", 0.0) or 0.0),
+    }
 
     global_stats_collection.replace_one(
         {"_id": "global"},
@@ -198,11 +331,12 @@ def stop_monitoring():
 
     if session_start_at is not None:
         events = []
-        for _ in range(10):
+        for _ in range(30):
             events = list(
                 event_collection.find(
                     {
                         "session_id": {"$exists": True},
+                        "label": {"$exists": True},
                         "timestamp": {"$gte": session_start_at},
                     }
                 )
@@ -213,8 +347,8 @@ def stop_monitoring():
             time.sleep(0.2)
 
         session_stats = compute_session_attention(events)
-        print("EVENTS:", events, flush=True)
-        print("SESSION_STATS:", session_stats, flush=True)
+        if session_stats is None:
+            session_stats = build_fallback_session_stats(session_start_at)
         if session_stats is not None:
             update_global_stats(session_stats)
 
@@ -297,17 +431,7 @@ def flagged_events():
 def get_stats():
     """Return global stats."""
     stats = global_stats_collection.find_one({"_id": "global"})
-    if not stats:
-        return jsonify({"session_count": 0})
-
-    return jsonify(
-        {
-            "session_count": stats["session_count"],
-            "avg_attention_duration_sec": stats["avg_attention_duration_sec"],
-            "avg_attention_ratio": stats["avg_attention_ratio"],
-            "avg_alert_count": stats["avg_alert_count"],
-        }
-    )
+    return jsonify(build_stats_response(stats))
 
 
 @app.post("/frames")

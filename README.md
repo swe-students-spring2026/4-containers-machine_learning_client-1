@@ -22,6 +22,23 @@ This project requires Docker Compose to run the following services:
 - Web App
 - Machine Learning Client 
 
+### Global Statistics Environment Variables
+
+You can configure default global statistics in `.env` for the web app:
+
+- `GLOBAL_STATS_COLLECTION` (Mongo collection for aggregate stats)
+- `GLOBAL_STATS_SESSION_COUNT`
+- `GLOBAL_STATS_TOTAL_DURATION_SEC`
+- `GLOBAL_STATS_TOTAL_ALARM_DURATION_SEC`
+- `GLOBAL_STATS_TOTAL_ATTENTION_DURATION_SEC`
+- `GLOBAL_STATS_TOTAL_ATTENTION_RATIO`
+- `GLOBAL_STATS_TOTAL_ALERT_COUNT`
+- `GLOBAL_AVG_THRESHOLD_SEC`
+- `GLOBAL_AVG_ALARM_COUNT`
+- `GLOBAL_AVG_DURATION_SEC`
+
+If no global stats document exists in MongoDB, the web app now uses these values as defaults.
+
 ### How To Run 
 
 1. Clone The Repository 

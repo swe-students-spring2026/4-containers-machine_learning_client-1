@@ -1,6 +1,6 @@
 """Tests for the Flask Web App."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import app
@@ -150,7 +150,18 @@ def test_stats_no_sessions(client):
         response = client.get("/stats")
 
     assert response.status_code == 200
-    assert response.get_json()["session_count"] == 0
+    data = response.get_json()
+    assert data["session_count"] == 0
+    assert data["sessions_count"] == 0
+    assert data["avg_threshold"] == app.get_env_float("FLAG_THRESHOLD_SEC", 0.0)
+    assert data["avg_alarm_count"] == 0.0
+    assert data["avg_duration_sec"] == 0.0
+    assert data["last_session"]["flag_threshold_sec"] == app.get_env_float(
+        "FLAG_THRESHOLD_SEC", 0.0
+    )
+    assert data["last_session"]["focused_duration_sec"] == 0.0
+    assert data["last_session"]["alarm_count"] == 0
+    assert data["last_session"]["duration_sec"] == 0.0
 
 
 def test_stats_returns_global_values(client):
@@ -158,19 +169,117 @@ def test_stats_returns_global_values(client):
     fake_global_stats = {
         "_id": "global",
         "session_count": 2,
+        "total_duration_sec": 200.0,
         "avg_attention_duration_sec": 90.0,
         "avg_attention_ratio": 0.75,
         "avg_alert_count": 3.0,
+        "last_session": {
+            "flag_threshold_sec": 5.0,
+            "focused_duration_sec": 77.0,
+            "alarm_count": 4,
+            "duration_sec": 88.0,
+        },
     }
 
-    with patch("app.global_stats_collection.find_one", return_value=fake_global_stats):
+    with (
+        patch("app.global_stats_collection.find_one", return_value=fake_global_stats),
+        patch.dict(
+            "os.environ",
+            {
+                "GLOBAL_AVG_ALARM_COUNT": "",
+                "GLOBAL_AVG_DURATION_SEC": "",
+            },
+            clear=False,
+        ),
+    ):
         response = client.get("/stats")
 
     data = response.get_json()
     assert data["session_count"] == 2
+    assert data["sessions_count"] == 2
     assert data["avg_attention_duration_sec"] == 90.0
     assert data["avg_attention_ratio"] == 0.75
     assert data["avg_alert_count"] == 3.0
+    assert data["avg_alarm_count"] == 3.0
+    assert data["avg_duration_sec"] == 100.0
+    assert data["last_session"]["flag_threshold_sec"] == 5.0
+    assert data["last_session"]["focused_duration_sec"] == 77.0
+    assert data["last_session"]["alarm_count"] == 4
+    assert data["last_session"]["duration_sec"] == 88.0
+
+
+def test_stats_no_sessions_uses_env_defaults(client):
+    """Test /stats uses env defaults when aggregate document is missing."""
+    with (
+        patch("app.global_stats_collection.find_one", return_value=None),
+        patch.dict(
+            "os.environ",
+            {
+                "GLOBAL_AVG_THRESHOLD_SEC": "7.5",
+                "GLOBAL_AVG_ALARM_COUNT": "1.25",
+                "GLOBAL_AVG_DURATION_SEC": "42",
+            },
+            clear=False,
+        ),
+    ):
+        response = client.get("/stats")
+
+    data = response.get_json()
+    assert data["session_count"] == 0
+    assert data["sessions_count"] == 0
+    assert data["avg_threshold"] == 7.5
+    assert data["avg_alarm_count"] == 1.25
+    assert data["avg_duration_sec"] == 42.0
+    assert data["last_session"]["flag_threshold_sec"] == app.get_env_float(
+        "FLAG_THRESHOLD_SEC", 0.0
+    )
+    assert data["last_session"]["focused_duration_sec"] == 0.0
+    assert data["last_session"]["alarm_count"] == 0
+    assert data["last_session"]["duration_sec"] == 0.0
+
+
+def test_update_global_stats_uses_env_seed_defaults():
+    """Test update_global_stats starts from env seed values when no DB doc exists."""
+    session_stats = {
+        "duration_sec": 60.0,
+        "alarm_duration_sec": 10.0,
+        "attention_duration_sec": 50.0,
+        "attention_ratio": 50.0 / 60.0,
+        "alert_count": 1,
+    }
+
+    with (
+        patch("app.global_stats_collection.find_one", return_value=None),
+        patch("app.global_stats_collection.replace_one") as mock_replace,
+        patch.dict(
+            "os.environ",
+            {
+                "GLOBAL_STATS_SESSION_COUNT": "2",
+                "GLOBAL_STATS_TOTAL_DURATION_SEC": "80",
+                "GLOBAL_STATS_TOTAL_ALARM_DURATION_SEC": "8",
+                "GLOBAL_STATS_TOTAL_ATTENTION_DURATION_SEC": "72",
+                "GLOBAL_STATS_TOTAL_ATTENTION_RATIO": "1.5",
+                "GLOBAL_STATS_TOTAL_ALERT_COUNT": "4",
+            },
+            clear=False,
+        ),
+    ):
+        result = app.update_global_stats(session_stats)
+
+    assert result["session_count"] == 3
+    assert result["total_duration_sec"] == 140.0
+    assert result["total_alarm_duration_sec"] == 18.0
+    assert result["total_attention_duration_sec"] == 122.0
+    assert result["total_alert_count"] == 5
+    assert result["avg_attention_duration_sec"] == 122.0 / 3.0
+    assert result["avg_alert_count"] == 5.0 / 3.0
+    assert result["last_session"]["flag_threshold_sec"] == app.get_env_float(
+        "FLAG_THRESHOLD_SEC", 0.0
+    )
+    assert result["last_session"]["focused_duration_sec"] == 50.0
+    assert result["last_session"]["alarm_count"] == 1
+    assert result["last_session"]["duration_sec"] == 60.0
+    mock_replace.assert_called_once()
 
 
 def test_to_seconds_with_datetime():
@@ -404,6 +513,12 @@ def test_update_global_stats_creates_new_global_doc():
     assert result["total_alert_count"] == 1
     assert result["avg_attention_duration_sec"] == 50.0
     assert result["avg_alert_count"] == 1.0
+    assert result["last_session"]["flag_threshold_sec"] == app.get_env_float(
+        "FLAG_THRESHOLD_SEC", 0.0
+    )
+    assert result["last_session"]["focused_duration_sec"] == 50.0
+    assert result["last_session"]["alarm_count"] == 1
+    assert result["last_session"]["duration_sec"] == 60.0
     mock_replace.assert_called_once()
 
 
@@ -439,6 +554,12 @@ def test_update_global_stats_updates_existing_doc():
     assert result["total_alert_count"] == 3
     assert result["avg_attention_duration_sec"] == 42.5
     assert result["avg_alert_count"] == 1.5
+    assert result["last_session"]["flag_threshold_sec"] == app.get_env_float(
+        "FLAG_THRESHOLD_SEC", 0.0
+    )
+    assert result["last_session"]["focused_duration_sec"] == 35.0
+    assert result["last_session"]["alarm_count"] == 2
+    assert result["last_session"]["duration_sec"] == 40.0
     mock_replace.assert_called_once()
 
 
@@ -495,16 +616,16 @@ def test_stop_monitoring_skips_update_when_no_session_start(client):
     mock_update.assert_not_called()
 
 
-def test_stop_monitoring_skips_update_when_session_stats_none(client):
-    """Test stop_monitoring does not update globals when session stats are None."""
+def test_stop_monitoring_uses_fallback_when_session_stats_none(client):
+    """Test stop_monitoring uses fallback stats when computed stats are missing."""
     fake_control = {
-        "session_start_at": 100.0,
+        "session_start_at": datetime.now(timezone.utc) - timedelta(seconds=3),
     }
     fake_events = [
         {
             "label": "start",
             "session_id": "abc",
-            "timestamp": 100.0,
+            "timestamp": fake_control["session_start_at"],
         }
     ]
 
@@ -519,4 +640,13 @@ def test_stop_monitoring_skips_update_when_session_stats_none(client):
 
     assert response.status_code == 302
     mock_set_status.assert_called_once_with("stopped")
-    mock_update.assert_not_called()
+    mock_update.assert_called_once()
+    fallback_stats = mock_update.call_args[0][0]
+    assert fallback_stats["duration_sec"] >= 0.0
+    assert fallback_stats["alarm_duration_sec"] == 0.0
+    assert fallback_stats["attention_duration_sec"] == fallback_stats["duration_sec"]
+    if fallback_stats["duration_sec"] > 0:
+        assert fallback_stats["attention_ratio"] == 1.0
+    else:
+        assert fallback_stats["attention_ratio"] == 0.0
+    assert fallback_stats["alert_count"] == 0
