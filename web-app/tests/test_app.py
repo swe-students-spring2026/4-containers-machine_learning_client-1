@@ -15,7 +15,14 @@ def test_status_route_returns_json(client):
     """Test that route returns expected JSON"""
     with patch(
         "app.get_monitoring_control",
-        return_value={"status": "running", "updated_at": 123.45},
+        return_value={
+            "status": "running",
+            "updated_at": 123.45,
+            "alarm_active": True,
+            "alarm_event_id": "abc123",
+            "alarm_state": "looking_away",
+            "alarm_triggered_at": 456.78,
+        },
     ):
         response = client.get("/status")
 
@@ -23,6 +30,10 @@ def test_status_route_returns_json(client):
     assert response.is_json
     assert response.get_json()["monitoring"] is True
     assert response.get_json()["updated_at"] == 123.45
+    assert response.get_json()["alarm"]["active"] is True
+    assert response.get_json()["alarm"]["event"]["id"] == "abc123"
+    assert response.get_json()["alarm"]["event"]["state"] == "looking_away"
+    assert response.get_json()["alarm"]["event"]["timestamp"] == 456.78
 
 
 def test_start_monitoring_redirects(client):
@@ -41,6 +52,25 @@ def test_stop_monitoring_redirects(client):
 
     assert response.status_code == 302
     mock_set_status.assert_called_once_with("stopped")
+
+
+def test_dismiss_alarm_clears_alarm_state(client):
+    """Test that dismissing the alarm returns an updated status payload."""
+    with (
+        patch("app.control_collection.update_one") as mock_update,
+        patch(
+            "app.get_monitoring_control",
+            return_value={"status": "running", "updated_at": 123.45},
+        ),
+    ):
+        response = client.post("/alarm/dismiss")
+
+    assert response.status_code == 200
+    assert response.is_json
+    assert response.get_json()["ok"] is True
+    assert response.get_json()["monitoring"] is True
+    assert response.get_json()["alarm"]["active"] is False
+    mock_update.assert_called_once()
 
 
 def test_events_invalid_after_id_returns_400(client):
