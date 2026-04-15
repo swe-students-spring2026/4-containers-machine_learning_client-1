@@ -5,6 +5,7 @@
     --text: #121212;
     --accent: #1a1a1a;
     --danger: #9f1d1d;
+    --danger-bright: rgba(224, 32, 32, 0.55);
     --shadow: 0 24px 60px rgba(0, 0, 0, 0.12);
 }
 
@@ -13,6 +14,7 @@
 }
 
 body {
+    position: relative;
     margin: 0;
     min-height: 100vh;
     display: grid;
@@ -22,6 +24,21 @@ body {
         var(--bg);
     color: var(--text);
     font-family: "Georgia", "Times New Roman", serif;
+    overflow: hidden;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 900;
+}
+
+body.alarm-active::before {
+    animation: danger-flash 0.85s steps(2, end) infinite;
 }
 
 main {
@@ -29,6 +46,8 @@ main {
     display: grid;
     place-items: center;
     padding: 24px;
+    position: relative;
+    z-index: 200;
 }
 
 button {
@@ -43,6 +62,8 @@ button {
     background: var(--accent);
     box-shadow: var(--shadow);
     transition: transform 120ms ease, opacity 120ms ease;
+    position: relative;
+    z-index: 250;
 }
 
 button.stop {
@@ -59,14 +80,18 @@ button:disabled {
     transform: none;
 }
 
-#popup-stack {
+#alarm-modal {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    width: min(360px, calc(100vw - 40px));
-    display: grid;
-    gap: 12px;
+    inset: 0;
+    display: none;
+    place-items: center;
+    padding: 24px;
+    background: rgba(18, 18, 18, 0.35);
     z-index: 1000;
+}
+
+#alarm-modal.active {
+    display: grid;
 }
 
 .popup {
@@ -74,7 +99,8 @@ button:disabled {
     border-left: 6px solid var(--danger);
     border-radius: 16px;
     box-shadow: var(--shadow);
-    padding: 16px;
+    padding: 20px;
+    width: min(420px, calc(100vw - 40px));
 }
 
 .popup h2 {
@@ -88,18 +114,37 @@ button:disabled {
 }
 
 .popup button {
-    min-width: auto;
-    padding: 10px 18px;
+    min-width: 220px;
+    padding: 12px 18px;
     font-size: 0.95rem;
     box-shadow: none;
 }
 
 video {
     position: fixed;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
+    top: 24px;
+    right: 24px;
+    width: 360px;
+    height: 270px;
+    object-fit: cover;
+    border-radius: 20px;
+    border: 2px solid #121212;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+    background: #000;
+    opacity: 1;
+    z-index: 100;
     pointer-events: none;
-    right: 0;
-    bottom: 0;
+}
+
+@keyframes danger-flash {
+    0%,
+    100% {
+        background: rgba(0, 0, 0, 0);
+        opacity: 0;
+    }
+
+    50% {
+        background: var(--danger-bright);
+        opacity: 1;
+    }
 }
