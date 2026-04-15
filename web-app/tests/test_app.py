@@ -48,14 +48,13 @@ def test_start_monitoring_redirects(client):
 def test_stop_monitoring_redirects(client):
     """Test that stop monitoring redirects to home page"""
     with (
+        patch("app.get_monitoring_control", return_value={}),
         patch("app.set_monitoring_status") as mock_set_status,
-        patch("app.save_session_summary") as mock_save,
     ):
         response = client.post("/stop")
 
     assert response.status_code == 302
     mock_set_status.assert_called_once_with("stopped")
-    mock_save.assert_called_once()
 
 
 def test_dismiss_alarm_clears_alarm_state(client):
@@ -142,47 +141,29 @@ def test_ingest_frame_stores_document(client):
 
 
 def test_stats_no_sessions(client):
-    """Test /stats returns sessions_count 0 when collection is empty."""
-    with patch("app.session_collection.find", return_value=[]):
+    """Test /stats returns session_count 0 when collection is empty."""
+    with patch("app.global_stats_collection.find_one", return_value=None):
         response = client.get("/stats")
 
     assert response.status_code == 200
-    assert response.get_json()["sessions_count"] == 0
+    assert response.get_json()["session_count"] == 0
 
 
-def test_stats_includes_last_session(client):
-    """Test /stats includes the most recent session data."""
-    fake_sessions = [
-        {"flag_threshold_sec": 5.0, "alarm_count": 2, "duration_sec": 60.0},
-        {"flag_threshold_sec": 5.0, "alarm_count": 4, "duration_sec": 120.0},
-    ]
-    with (
-        patch("app.session_collection.find", return_value=fake_sessions),
-        patch("app.session_collection.find_one", return_value=fake_sessions[-1]),
-    ):
+def test_stats_returns_global_values(client):
+    """Test /stats returns the global aggregate values."""
+    fake_global_stats = {
+        "_id": "global",
+        "session_count": 2,
+        "avg_attention_duration_sec": 90.0,
+        "avg_attention_ratio": 0.75,
+        "avg_alert_count": 3.0,
+    }
+
+    with patch("app.global_stats_collection.find_one", return_value=fake_global_stats):
         response = client.get("/stats")
 
     data = response.get_json()
-    assert "last_session" in data
-    assert data["last_session"]["flag_threshold_sec"] == 5.0
-    assert data["last_session"]["alarm_count"] == 4
-    assert data["last_session"]["duration_sec"] == 120.0
-
-
-def test_stats_returns_averages(client):
-    """Test /stats computes averages across sessions."""
-    fake_sessions = [
-        {"flag_threshold_sec": 5.0, "alarm_count": 2, "duration_sec": 60.0},
-        {"flag_threshold_sec": 5.0, "alarm_count": 4, "duration_sec": 120.0},
-    ]
-    with (
-        patch("app.session_collection.find", return_value=fake_sessions),
-        patch("app.session_collection.find_one", return_value=fake_sessions[-1]),
-    ):
-        response = client.get("/stats")
-
-    data = response.get_json()
-    assert data["sessions_count"] == 2
-    assert data["avg_threshold"] == 5.0
-    assert data["avg_alarm_count"] == 3.0
-    assert data["avg_duration_sec"] == 90.0
+    assert data["session_count"] == 2
+    assert data["avg_attention_duration_sec"] == 90.0
+    assert data["avg_attention_ratio"] == 0.75
+    assert data["avg_alert_count"] == 3.0
