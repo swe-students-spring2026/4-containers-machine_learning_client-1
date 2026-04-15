@@ -19,7 +19,7 @@ A real-time attention monitoring system that uses computer vision to detect when
 ## Team Members 
 [Kyle Chen](https://github.com/KyleC55)<br>
 [Minho Eune](https://github.com/minhoeune)<br>
-[name]()<br>
+[Jaiden Xu](https://github.com/jbx202)<br>
 [name]()<br>
 [name]()<br>
 
@@ -53,6 +53,15 @@ cp .env.example .env
 - ORIENTATION_THRESHOLD: Face orientation sensitivity
 
 ## Running The Software 
+
+### Configuration 
+
+Before running the app please make sure these you have **Docker** installed on your machine
+
+This project requires Docker Compose to run the following services:
+- MongoDB
+- Web App
+- Machine Learning Client 
 
 ### Global Statistics Environment Variables
 
