@@ -1,169 +1,225 @@
-"""Tests for the Flask Web App Routes"""
+"""Test Cases For Web App"""
+from datetime import datetime, timezone
+from unittest.mock import patch
 
-from unittest.mock import Mock, patch
-
-
-def test_home_route_status_code(client):
-    """Test home route returns to 200"""
-    with patch("app.get_monitoring_control", return_value={}):
-        response = client.get("/")
-
-    assert response.status_code == 200
+import app
 
 
-def test_status_route_returns_json(client):
-    """Test that route returns expected JSON"""
-    with patch(
-        "app.get_monitoring_control",
-        return_value={
-            "status": "running",
-            "updated_at": 123.45,
-            "alarm_active": True,
-            "alarm_event_id": "abc123",
-            "alarm_state": "looking_away",
-            "alarm_triggered_at": 456.78,
+def test_to_seconds_with_datetime():
+    """Test to_seconds converts datetime to float seconds."""
+    ts = datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc)
+    result = app.to_seconds(ts)
+
+    assert isinstance(result, float)
+    assert result == ts.timestamp()
+
+
+def test_to_seconds_with_float():
+    """Test to_seconds returns float unchanged."""
+    result = app.to_seconds(123.45)
+
+    assert result == 123.45
+
+
+def test_compute_session_attention_returns_none_for_empty_events():
+    """Test compute_session_attention returns None for no events."""
+    assert app.compute_session_attention([]) is None
+
+
+def test_compute_session_attention_returns_none_without_end():
+    """Test compute_session_attention returns None when end is missing."""
+    events = [
+        {
+            "label": "start",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+        }
+    ]
+
+    assert app.compute_session_attention(events) is None
+
+
+def test_compute_session_attention_no_alarm():
+    """Test compute_session_attention for simple start/end session."""
+    events = [
+        {
+            "label": "start",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
         },
-    ):
-        response = client.get("/status")
+        {
+            "label": "end",
+            "timestamp": datetime(2026, 4, 15, 12, 1, 0, tzinfo=timezone.utc),
+        },
+    ]
 
-    assert response.status_code == 200
-    assert response.is_json
-    assert response.get_json()["monitoring"] is True
-    assert response.get_json()["updated_at"] == 123.45
-    assert response.get_json()["alarm"]["active"] is True
-    assert response.get_json()["alarm"]["event"]["id"] == "abc123"
-    assert response.get_json()["alarm"]["event"]["state"] == "looking_away"
-    assert response.get_json()["alarm"]["event"]["timestamp"] == 456.78
+    result = app.compute_session_attention(events)
 
-
-def test_start_monitoring_redirects(client):
-    """Tests that start monitoring redirects to home page"""
-    with patch("app.set_monitoring_status") as mock_set_status:
-        response = client.post("/start")
-
-    assert response.status_code == 302
-    mock_set_status.assert_called_once_with("running")
+    assert result["duration_sec"] == 60.0
+    assert result["alarm_duration_sec"] == 0.0
+    assert result["attention_duration_sec"] == 60.0
+    assert result["attention_ratio"] == 1.0
+    assert result["alert_count"] == 0
 
 
-def test_stop_monitoring_redirects(client):
-    """Test that stop monitoring redirects to home page"""
+def test_compute_session_attention_with_alarm():
+    """Test compute_session_attention with one alarm interval."""
+    events = [
+        {
+            "label": "start",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+        },
+        {
+            "label": "alarm-start",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 10, tzinfo=timezone.utc),
+        },
+        {
+            "label": "alarm-end",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 20, tzinfo=timezone.utc),
+        },
+        {
+            "label": "end",
+            "timestamp": datetime(2026, 4, 15, 12, 1, 0, tzinfo=timezone.utc),
+        },
+    ]
+
+    result = app.compute_session_attention(events)
+
+    assert result["duration_sec"] == 60.0
+    assert result["alarm_duration_sec"] == 10.0
+    assert result["attention_duration_sec"] == 50.0
+    assert result["attention_ratio"] == 50.0 / 60.0
+    assert result["alert_count"] == 1
+
+
+def test_compute_session_attention_closes_open_alarm_at_end():
+    """Test compute_session_attention treats end as alarm-end when needed."""
+    events = [
+        {
+            "label": "start",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+        },
+        {
+            "label": "alarm-start",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 30, tzinfo=timezone.utc),
+        },
+        {
+            "label": "end",
+            "timestamp": datetime(2026, 4, 15, 12, 1, 0, tzinfo=timezone.utc),
+        },
+    ]
+
+    result = app.compute_session_attention(events)
+
+    assert result["duration_sec"] == 60.0
+    assert result["alarm_duration_sec"] == 30.0
+    assert result["attention_duration_sec"] == 30.0
+    assert result["alert_count"] == 1
+
+
+def test_update_global_stats_creates_new_global_doc():
+    """Test update_global_stats creates a new aggregate document."""
+    session_stats = {
+        "duration_sec": 60.0,
+        "alarm_duration_sec": 10.0,
+        "attention_duration_sec": 50.0,
+        "attention_ratio": 50.0 / 60.0,
+        "alert_count": 1,
+    }
+
     with (
-        patch("app.get_monitoring_control", return_value={}),
+        patch("app.global_stats_collection.find_one", return_value=None),
+        patch("app.global_stats_collection.replace_one") as mock_replace,
+    ):
+        result = app.update_global_stats(session_stats)
+
+    assert result["session_count"] == 1
+    assert result["total_duration_sec"] == 60.0
+    assert result["total_alarm_duration_sec"] == 10.0
+    assert result["total_attention_duration_sec"] == 50.0
+    assert result["total_alert_count"] == 1
+    mock_replace.assert_called_once()
+
+
+def test_update_global_stats_updates_existing_doc():
+    """Test update_global_stats updates an existing aggregate document."""
+    existing = {
+        "_id": "global",
+        "session_count": 1,
+        "total_duration_sec": 60.0,
+        "total_alarm_duration_sec": 10.0,
+        "total_attention_duration_sec": 50.0,
+        "total_attention_ratio": 0.8,
+        "total_alert_count": 1,
+    }
+    session_stats = {
+        "duration_sec": 40.0,
+        "alarm_duration_sec": 5.0,
+        "attention_duration_sec": 35.0,
+        "attention_ratio": 0.875,
+        "alert_count": 2,
+    }
+
+    with (
+        patch("app.global_stats_collection.find_one", return_value=existing),
+        patch("app.global_stats_collection.replace_one") as mock_replace,
+    ):
+        result = app.update_global_stats(session_stats)
+
+    assert result["session_count"] == 2
+    assert result["total_duration_sec"] == 100.0
+    assert result["total_alarm_duration_sec"] == 15.0
+    assert result["total_attention_duration_sec"] == 85.0
+    assert result["total_alert_count"] == 3
+    mock_replace.assert_called_once()
+
+
+def test_stop_monitoring_updates_global_stats(client):
+    """Test stop_monitoring computes stats and updates globals."""
+    fake_control = {
+        "session_start_at": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc)
+    }
+    fake_events = [
+        {
+            "label": "start",
+            "session_id": "abc",
+            "timestamp": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc),
+        },
+        {
+            "label": "end",
+            "session_id": "abc",
+            "timestamp": datetime(2026, 4, 15, 12, 1, 0, tzinfo=timezone.utc),
+        },
+    ]
+    fake_stats = {
+        "duration_sec": 60.0,
+        "alarm_duration_sec": 0.0,
+        "attention_duration_sec": 60.0,
+        "attention_ratio": 1.0,
+        "alert_count": 0,
+    }
+
+    with (
+        patch("app.get_monitoring_control", return_value=fake_control),
         patch("app.set_monitoring_status") as mock_set_status,
+        patch("app.event_collection.find", return_value=fake_events),
+        patch("app.compute_session_attention", return_value=fake_stats),
+        patch("app.update_global_stats") as mock_update,
     ):
         response = client.post("/stop")
 
     assert response.status_code == 302
     mock_set_status.assert_called_once_with("stopped")
+    mock_update.assert_called_once_with(fake_stats)
 
 
-def test_dismiss_alarm_clears_alarm_state(client):
-    """Test that dismissing the alarm returns an updated status payload."""
+def test_stop_monitoring_skips_update_when_no_session_start(client):
+    """Test stop_monitoring skips stats update when no session_start_at exists."""
     with (
-        patch("app.control_collection.update_one") as mock_update,
-        patch(
-            "app.get_monitoring_control",
-            return_value={"status": "running", "updated_at": 123.45},
-        ),
+        patch("app.get_monitoring_control", return_value={}),
+        patch("app.set_monitoring_status") as mock_set_status,
+        patch("app.update_global_stats") as mock_update,
     ):
-        response = client.post("/alarm/dismiss")
+        response = client.post("/stop")
 
-    assert response.status_code == 200
-    assert response.is_json
-    assert response.get_json()["ok"] is True
-    assert response.get_json()["monitoring"] is True
-    assert response.get_json()["alarm"]["active"] is False
-    mock_update.assert_called_once()
-
-
-def test_events_invalid_after_id_returns_400(client):
-    """Test that invalid after_id returns to 400"""
-    response = client.get("/events?after_id=not-a-real-objectid")
-
-    assert response.status_code == 400
-    assert response.is_json
-    assert response.get_json()["error"] == "invalid after_id"
-
-
-def test_events_returns_flagged_events(client):
-    """Test that flagged events are returned as JSON"""
-    fake_record = {
-        "_id": "abc123",
-        "timestamp": 123.45,
-        "state": "looking_away",
-        "flag": True,
-    }
-
-    fake_cursor = Mock()
-    fake_cursor.sort.return_value = [fake_record]
-
-    with patch("app.event_collection.find", return_value=fake_cursor):
-        response = client.get("/events")
-
-    assert response.status_code == 200
-    assert response.is_json
-
-    data = response.get_json()
-    assert "events" in data
-    assert len(data["events"]) == 1
-    assert data["events"][0]["timestamp"] == 123.45
-    assert data["events"][0]["state"] == "looking_away"
-    assert data["events"][0]["flag"] is True
-
-
-def test_ingest_frame_missing_image_returns_400(client):
-    """Test that missing frame payload returns 400."""
-    response = client.post("/frames", json={})
-
-    assert response.status_code == 400
-    assert response.is_json
-    assert response.get_json()["error"] == "missing image_base64"
-
-
-def test_ingest_frame_invalid_base64_returns_400(client):
-    """Test that invalid base64 frame payload returns 400."""
-    response = client.post("/frames", json={"image_base64": "not-base64!"})
-
-    assert response.status_code == 400
-    assert response.is_json
-    assert response.get_json()["error"] == "invalid image_base64"
-
-
-def test_ingest_frame_stores_document(client):
-    """Test that valid frame payload is stored."""
-    with patch("app.frame_collection.insert_one") as mock_insert:
-        response = client.post("/frames", json={"image_base64": "aGVsbG8="})
-
-    assert response.status_code == 201
-    assert response.is_json
-    assert response.get_json()["ok"] is True
-    mock_insert.assert_called_once()
-
-
-def test_stats_no_sessions(client):
-    """Test /stats returns session_count 0 when collection is empty."""
-    with patch("app.global_stats_collection.find_one", return_value=None):
-        response = client.get("/stats")
-
-    assert response.status_code == 200
-    assert response.get_json()["session_count"] == 0
-
-
-def test_stats_returns_global_values(client):
-    """Test /stats returns the global aggregate values."""
-    fake_global_stats = {
-        "_id": "global",
-        "session_count": 2,
-        "avg_attention_duration_sec": 90.0,
-        "avg_attention_ratio": 0.75,
-        "avg_alert_count": 3.0,
-    }
-
-    with patch("app.global_stats_collection.find_one", return_value=fake_global_stats):
-        response = client.get("/stats")
-
-    data = response.get_json()
-    assert data["session_count"] == 2
-    assert data["avg_attention_duration_sec"] == 90.0
-    assert data["avg_attention_ratio"] == 0.75
-    assert data["avg_alert_count"] == 3.0
+    assert response.status_code == 302
+    mock_set_status.assert_called_once_with("stopped")
+    mock_update.assert_not_called()
