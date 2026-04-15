@@ -97,7 +97,9 @@ def build_stats_response(stats):
         }
 
     session_count = int(stats.get("session_count", 0) or 0)
-    avg_attention_duration_sec = float(stats.get("avg_attention_duration_sec", 0.0) or 0.0)
+    avg_attention_duration_sec = float(
+        stats.get("avg_attention_duration_sec", 0.0) or 0.0
+    )
     avg_attention_ratio = float(stats.get("avg_attention_ratio", 0.0) or 0.0)
     avg_alert_count = float(stats.get("avg_alert_count", 0.0) or 0.0)
     last_session = stats.get("last_session") or default_last_session
@@ -278,7 +280,10 @@ def build_fallback_session_stats(session_start_at):
 
 def update_global_stats(session_stats):
     """Update the global aggregate stats document."""
-    global_stats = global_stats_collection.find_one({"_id": "global"}) or build_global_stats_defaults()
+    global_stats = (
+        global_stats_collection.find_one({"_id": "global"})
+        or build_global_stats_defaults()
+    )
 
     global_stats["session_count"] += 1
     global_stats["total_duration_sec"] += session_stats["duration_sec"]
