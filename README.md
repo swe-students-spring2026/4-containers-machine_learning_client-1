@@ -39,8 +39,8 @@ docker compose up --build
 http://localhost:8000
 ```
 
-### After installing the required dependencies
-Run the program from the project root with:
+### If docker is already installed, and has been composed before:
+To run the program from the project root with:
 ```bash 
 docker compose up --build
 ```
