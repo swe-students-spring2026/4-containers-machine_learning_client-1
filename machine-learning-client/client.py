@@ -42,6 +42,30 @@ def is_monitoring_enabled(control_collection):
     return control is not None and control.get("status") == "running"
 
 
+def is_alarm_active(control_collection):
+    """Return whether an alarm is currently active."""
+
+    control = control_collection.find_one({"_id": "monitoring"})
+    return control is not None and control.get("alarm_active") is True
+
+
+def activate_alarm(control_collection, event_id, event):
+    """Persist the current alarm so monitoring pauses until dismissal."""
+
+    control_collection.update_one(
+        {"_id": "monitoring"},
+        {
+            "$set": {
+                "alarm_active": True,
+                "alarm_event_id": event_id,
+                "alarm_state": event.get("state"),
+                "alarm_triggered_at": event.get("timestamp"),
+            }
+        },
+        upsert=True,
+    )
+
+
 def create_landmarker():
     """
     Create the MediaPipe Face Landmarker from the configured model file.
@@ -55,7 +79,11 @@ def create_landmarker():
         running_mode=vision.RunningMode.IMAGE,
         num_faces=1,
     )
-    return vision.FaceLandmarker.create_from_options(options)
+    try:
+        return vision.FaceLandmarker.create_from_options(options)
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"Failed to create Face Landmarker: {exc}", file=sys.stderr)
+        return None
 
 
 def classify_attention(detection_result):
@@ -116,14 +144,25 @@ def run_monitoring(collection, control_collection, frame_collection):
         return
 
     last_attentive_at = time.monotonic()
-    latest_existing_frame = frame_collection.find_one(sort=[("_id", -1)])
-    last_frame_id = (
-        latest_existing_frame.get("_id") if latest_existing_frame is not None else None
-    )
+    last_frame_id = None
+    alarm_paused = False
 
     try:
         while is_monitoring_enabled(control_collection):
             loop_started_at = time.monotonic()
+            if is_alarm_active(control_collection):
+                alarm_paused = True
+                elapsed = time.monotonic() - loop_started_at
+                time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
+                continue
+            if alarm_paused:
+                last_attentive_at = time.monotonic()
+                alarm_paused = False
+            if last_frame_id is None:
+                latest_existing_frame = frame_collection.find_one(sort=[("_id", -1)])
+                if latest_existing_frame is not None:
+                    last_frame_id = latest_existing_frame.get("_id")
+
             frame_query = {}
             if last_frame_id is not None:
                 frame_query["_id"] = {"$gt": last_frame_id}
@@ -137,19 +176,26 @@ def run_monitoring(collection, control_collection, frame_collection):
             frame = decode_frame(frame_document)
             last_frame_id = frame_document.get("_id", last_frame_id)
             if frame is None:
+                elapsed = time.monotonic() - loop_started_at
+                time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
                 continue
 
             event, last_attentive_at = process_frame(
                 frame, landmarker, last_attentive_at
             )
             try:
-                collection.insert_one(event)
+                inserted_event = collection.insert_one(event)
+                if event.get("flag"):
+                    activate_alarm(
+                        control_collection, inserted_event.inserted_id, event
+                    )
             except PyMongoError as exc:
                 print(f"MongoDB insert failed: {exc}", file=sys.stderr)
-            print(event)
+                print(event)
 
             elapsed = time.monotonic() - loop_started_at
             time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
+
     except KeyboardInterrupt:
         print("Stopping client")
     finally:
