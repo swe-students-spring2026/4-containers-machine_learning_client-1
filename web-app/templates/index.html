@@ -16,6 +16,7 @@
     id = 'body'
 >
     <main>
+        <video id="camera-preview" autoplay playsinline muted></video>
         <form method="post" action="{{ url_for('stop_monitoring' if monitoring else 'start_monitoring') }}">
             <button
                 id="toggle-button"
@@ -116,6 +117,9 @@
             </button>
         </article>
     </section>
+    <audio id="alarm-audio" preload="auto" loop>
+        <source src="{{ url_for('static', filename='audio/TF041.WAV') }}" type="audio/wav">
+    </audio>
 
     <script src="{{ url_for('static', filename='js/index.js') }}"></script>
 </body>
