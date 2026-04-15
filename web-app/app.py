@@ -17,6 +17,9 @@ db = client[os.getenv("MONGO_DB", "mydatabase")]
 event_collection = db[os.getenv("MONGO_COLLECTION", "attention_events")]
 control_collection = db[os.getenv("CONTROL_COLLECTION", "attention_control")]
 frame_collection = db[os.getenv("FRAME_COLLECTION", "attention_frames")]
+session_collection = db[os.getenv("SESSION_COLLECTION", "attention_sessions")]
+FLAG_THRESHOLD_SEC = float(os.getenv("FLAG_THRESHOLD_SEC", "5"))
+ORIENTATION_THRESHOLD = float(os.getenv("ORIENTATION_THRESHOLD", "0.15"))
 
 
 def is_monitoring_enabled():
@@ -68,22 +71,42 @@ def set_monitoring_status(status):
     """Persist the current monitoring status."""
 
     updated_at = time.time()
+    fields = {
+        "status": status,
+        "updated_at": updated_at,
+        "alarm_active": False,
+        "alarm_event_id": None,
+        "alarm_state": None,
+        "alarm_triggered_at": None,
+    }
+    
+    if status == "running":
+        fields["session_start_at"] = updated_at
+    
     control_collection.update_one(
         {"_id": "monitoring"},
-        {
-            "$set": {
-                "status": status,
-                "updated_at": updated_at,
-                "alarm_active": False,
-                "alarm_event_id": None,
-                "alarm_state": None,
-                "alarm_triggered_at": None,
-            }
-        },
+        {"$set": fields},
         upsert=True,
     )
     return updated_at
 
+def save_session_summary():
+    control = get_monitoring_control()
+    start_time = control.get("session_start_at")
+    if start_time is None:
+        return
+    end_time = time.time()
+    alarm_count = event_collection.count_documents(
+        {"flag": True, "timestamp": {"$gte": start_time}}
+    )
+    session_collection.insert_one({
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration_sec": end_time - start_time,
+        "alarm_count": alarm_count,
+        "flag_threshold_sec": FLAG_THRESHOLD_SEC,
+        "orientation_threshold": ORIENTATION_THRESHOLD,
+    })
 
 @app.post("/start")
 def start_monitoring():
@@ -97,6 +120,7 @@ def start_monitoring():
 def stop_monitoring():
     """Set the monitoring status to stopped and return to the home page."""
 
+    save_session_summary()
     set_monitoring_status("stopped")
     return redirect(url_for("home"))
 
