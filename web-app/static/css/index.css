@@ -138,3 +138,34 @@ video {
         opacity: 1;
     }
 }
+
+#stats-panel {
+    width: min(480px, calc(100vw - 40px));
+    background: var(--panel);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin: 24px auto;
+    text-align: center;
+}
+
+#stats-panel h2 {
+    margin: 0 0 16px;
+    font-size: 1rem;
+}
+
+#stats-panel table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#stats-panel th,
+#stats-panel td {
+    padding: 8px 12px;
+    text-align: center;
+}
+
+#stats-panel td:first-child {
+    text-align: left;
+    width: 55%;
+}
