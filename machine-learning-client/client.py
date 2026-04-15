@@ -6,6 +6,8 @@ import base64
 import os
 import sys
 import time
+import uuid
+from datetime import datetime, timezone
 
 import cv2
 import mediapipe as mp
@@ -31,6 +33,9 @@ MODEL_PATH = os.getenv(
 NOSE_TIP_INDEX = 1
 LEFT_CHEEK_INDEX = 234
 RIGHT_CHEEK_INDEX = 454
+
+current_session_id = None # pylint: disable=invalid-name
+alarm_active = False # pylint: disable=invalid-name
 
 
 def is_monitoring_enabled(control_collection):
@@ -135,13 +140,36 @@ def decode_frame(frame_document):
     np_buffer = np.frombuffer(image_bytes, dtype=np.uint8)
     return cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
 
+def save_event(collection, label):
+    """Save a session event to MongoDB"""
+    global current_session_id
+
+    if current_session_id is None:
+        return
+
+    event_document = {
+        "session_id": current_session_id,
+        "timestamp": datetime.now(timezone.utc),
+        "label": label, 
+    }
+
+    try:
+        collection.insert_one(event_document)
+    except PyMongoError as exc:
+        print(f"MongoDB insert failed: {exc}", file=sys.stderr)
+        print(event_document)
 
 def run_monitoring(collection, control_collection, frame_collection):
     """Process frontend-uploaded frames and write events while enabled."""
+    global current_session_id, alarm_active
 
     landmarker = create_landmarker()
     if landmarker is None:
         return
+
+    current_session_id = str(uuid.uuid4())
+    alarm_active = False
+    save_event(collection, "start")
 
     last_attentive_at = time.monotonic()
     last_frame_id = None
@@ -156,6 +184,9 @@ def run_monitoring(collection, control_collection, frame_collection):
                 time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
                 continue
             if alarm_paused:
+                if alarm_active:
+                    save_event(collection, "alarm-end")
+                    alarm_active = False
                 last_attentive_at = time.monotonic()
                 alarm_paused = False
             if last_frame_id is None:
@@ -185,10 +216,16 @@ def run_monitoring(collection, control_collection, frame_collection):
             )
             try:
                 inserted_event = collection.insert_one(event)
-                if event.get("flag"):
+                if event.get("flag") and not alarm_active:
+                    save_event(collection, "alarm-start")
                     activate_alarm(
                         control_collection, inserted_event.inserted_id, event
                     )
+                    alarm_active = True
+                if not event.get("flag") and alarm_active:
+                    save_event(collection, "alarm-end")
+                    alarm_active = False
+
             except PyMongoError as exc:
                 print(f"MongoDB insert failed: {exc}", file=sys.stderr)
                 print(event)
@@ -199,6 +236,12 @@ def run_monitoring(collection, control_collection, frame_collection):
     except KeyboardInterrupt:
         print("Stopping client")
     finally:
+        if alarm_active:
+            save_event(collection, "alarm-end")
+            alarm_active = False
+
+        save_event(collection, "end")
+        current_session_id = None
         landmarker.close()
 
 
