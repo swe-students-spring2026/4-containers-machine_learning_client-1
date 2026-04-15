@@ -265,3 +265,19 @@ def test_stop_monitoring_skips_update_when_session_stats_none(client):
     assert response.status_code == 302
     mock_set_status.assert_called_once_with("stopped")
     mock_update.assert_not_called()
+
+
+def test_compute_session_attention_closes_open_alarm_at_end():
+    """Test compute_session_attention closes an open alarm at end."""
+    events = [
+        {"label": "start", "timestamp": 100.0},
+        {"label": "alarm-start", "timestamp": 110.0},
+        {"label": "end", "timestamp": 130.0},
+    ]
+
+    result = app.compute_session_attention(events)
+
+    assert result["duration_sec"] == 30.0
+    assert result["alarm_duration_sec"] == 20.0
+    assert result["attention_duration_sec"] == 10.0
+    assert result["alert_count"] == 1
