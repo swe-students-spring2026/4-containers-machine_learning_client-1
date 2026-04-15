@@ -144,10 +144,8 @@ def run_monitoring(collection, control_collection, frame_collection):
         return
 
     last_attentive_at = time.monotonic()
-    latest_existing_frame = frame_collection.find_one(sort=[("_id", -1)])
-    last_frame_id = (
-        latest_existing_frame.get("_id") if latest_existing_frame is not None else None
-    )
+    latest_existing_frame = None
+    initialized_last_frame_id = False
     alarm_paused = False
 
     try:
@@ -161,6 +159,14 @@ def run_monitoring(collection, control_collection, frame_collection):
             if alarm_paused:
                 last_attentive_at = time.monotonic()
                 alarm_paused = False
+            if not initialized_last_frame_id:
+                latest_existing_frame = frame_collection.find_one(sort=[("_id", -1)])
+                last_frame_id = (
+                    latest_existing_frame.get("_id")
+                    if latest_existing_frame is not None
+                    else None
+                )
+                initialized_last_frame_id = True
 
             frame_query = {}
             if last_frame_id is not None:
@@ -175,6 +181,8 @@ def run_monitoring(collection, control_collection, frame_collection):
             frame = decode_frame(frame_document)
             last_frame_id = frame_document.get("_id", last_frame_id)
             if frame is None:
+                elapsed = time.monotonic() - loop_started_at
+                time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
                 continue
 
             event, last_attentive_at = process_frame(
@@ -188,10 +196,11 @@ def run_monitoring(collection, control_collection, frame_collection):
                     )
             except PyMongoError as exc:
                 print(f"MongoDB insert failed: {exc}", file=sys.stderr)
-            print(event)
+                print(event)
 
             elapsed = time.monotonic() - loop_started_at
             time.sleep(max(0, PROCESS_INTERVAL_SEC - elapsed))
+            
     except KeyboardInterrupt:
         print("Stopping client")
     finally:
