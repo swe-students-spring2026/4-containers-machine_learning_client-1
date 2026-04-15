@@ -175,7 +175,10 @@ def test_stats_returns_averages(client):
         {"flag_threshold_sec": 5.0, "alarm_count": 2, "duration_sec": 60.0},
         {"flag_threshold_sec": 5.0, "alarm_count": 4, "duration_sec": 120.0},
     ]
-    with patch("app.session_collection.find", return_value=fake_sessions):
+    with (
+        patch("app.session_collection.find", return_value=fake_sessions),
+        patch("app.session_collection.find_one", return_value=fake_sessions[-1]),
+    ):
         response = client.get("/stats")
 
     data = response.get_json()

@@ -12,6 +12,7 @@
     data-alarm-active="{{ 'true' if alarm.active else 'false' }}"
     data-alarm-state="{{ alarm.event.state if alarm.event else '' }}"
     data-alarm-timestamp="{{ alarm.event.timestamp if alarm.event else '' }}"
+    data-just-stopped="{{ 'true' if request.args.get('stopped') == '1' else 'false' }}"
 >
     <main>
         <form method="post" action="{{ url_for('stop_monitoring' if monitoring else 'start_monitoring') }}">
@@ -24,6 +25,36 @@
             </button>
         </form>
     </main>
+
+    <section id="stats-panel" hidden>
+        <h2>Session Summary</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Your Session</th>
+                    <th>Global Average</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Attention Threshold (s)</td>
+                    <td id="stat-your-threshold">--</td>
+                    <td id="stat-avg-threshold">--</td>
+                </tr>
+                <tr>
+                    <td>Times Reminded</td>
+                    <td id="stat-your-alarms">--</td>
+                    <td id="stat-avg-alarms">--</td>
+                </tr>
+                <tr>
+                    <td>Session Duration (s)</td>
+                    <td id="stat-your-duration">--</td>
+                    <td id="stat-avg-duration">--</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
 
     <section
         id="alarm-modal"

@@ -123,7 +123,7 @@ def stop_monitoring():
 
     save_session_summary()
     set_monitoring_status("stopped")
-    return redirect(url_for("home"))
+    return redirect(url_for("home") + "?stopped=1")
 
 
 @app.get("/status")
