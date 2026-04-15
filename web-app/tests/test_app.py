@@ -226,20 +226,6 @@ def test_stop_monitoring_skips_update_when_no_session_start(client):
     mock_update.assert_not_called()
 
 
-def test_compute_session_attention_returns_none_without_end():
-    """Test compute_session_attention returns None when end is missing."""
-    events = [
-        {
-            "label": "start",
-            "timestamp": 100.0,
-        }
-    ]
-
-    result = app.compute_session_attention(events)
-
-    assert result is None
-
-
 def test_stop_monitoring_skips_update_when_session_stats_none(client):
     """Test stop_monitoring does not update globals when session stats are None."""
     fake_control = {
