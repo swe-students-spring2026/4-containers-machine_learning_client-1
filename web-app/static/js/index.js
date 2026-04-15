@@ -1,9 +1,11 @@
 const popupModal = document.getElementById("alarm-modal");
 const alarmMessage = document.getElementById("alarm-message");
+const statsPanel = document.getElementById("stats-panel");
 const dismissAlarmButton = document.getElementById("dismiss-alarm-button");
 const cameraPreview = document.getElementById("camera-preview");
 const alarmAudio = document.getElementById("alarm-audio");
 const captureCanvas = document.createElement("canvas");
+const justStopped = document.body.dataset.justStopped === "true";
 
 let monitoring = document.body.dataset.monitoring === "true";
 let pollTimer = null;
@@ -159,6 +161,24 @@ function stopFrameUploads() {
     frameTimer = null;
 }
 
+async function showSessionStats(sessionStart) {
+    const response = await fetch("/stats");
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.sessions_count === 0) return;
+
+    const last = data.last_session;
+
+    document.getElementById("stat-your-threshold").textContent = last.flag_threshold_sec?.toFixed(1) ?? "--";
+    document.getElementById("stat-avg-threshold").textContent = data.avg_threshold?.toFixed(1) ?? "--";
+    document.getElementById("stat-your-alarms").textContent = last.alarm_count ?? "--";
+    document.getElementById("stat-avg-alarms").textContent = data.avg_alarm_count?.toFixed(1) ?? "--";
+    document.getElementById("stat-your-duration").textContent = last.duration_sec?.toFixed(0) ?? "--";
+    document.getElementById("stat-avg-duration").textContent = data.avg_duration_sec?.toFixed(0) ?? "--";
+
+    statsPanel.hidden = false;
+}
+
 async function syncStatus() {
     const response = await fetch("/status");
     if (!response.ok) {
@@ -171,9 +191,11 @@ async function syncStatus() {
     updateAlarmUi(payload.alarm);
 
     if (!monitoring) {
+        const capturedStart = sessionStartTimestamp;
         stopPolling();
         stopFrameUploads();
         releaseCameraAccess();
+        showSessionStats(capturedStart).catch(() => null);
         return;
     }
 
@@ -236,4 +258,7 @@ if (monitoring) {
     stopPolling();
     stopFrameUploads();
     releaseCameraAccess();
+    if (justStopped) {
+        showSessionStats(sessionStartTimestamp).catch(() => null);
+    }
 }
