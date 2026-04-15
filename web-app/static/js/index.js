@@ -1,7 +1,12 @@
 const popupModal = document.getElementById("alarm-modal");
 const alarmMessage = document.getElementById("alarm-message");
 const statsPanel = document.getElementById("stats-panel");
+const dismissStatsButton = document.getElementById("dismiss-stats-button");
 const dismissAlarmButton = document.getElementById("dismiss-alarm-button");
+const liveTimeStarted = document.getElementById("live-time-started");
+const liveCurrentTime = document.getElementById("live-current-time");
+const liveTimeActive = document.getElementById("live-time-active");
+const liveAlarmCount = document.getElementById("live-alarm-count");
 const cameraPreview = document.getElementById("camera-preview");
 const alarmAudio = document.getElementById("alarm-audio");
 const captureCanvas = document.createElement("canvas");
@@ -16,6 +21,114 @@ const initialAlarmState = document.body.dataset.alarmState || "unknown";
 const initialAlarmTimestamp = Number(document.body.dataset.alarmTimestamp || 0);
 let frameTimer = null;
 let mediaStream = null;
+let liveClockTimer = null;
+let monitoringStartedAt = null;
+let alarmOccurrences = 0;
+let activeElapsedSeconds = 0;
+let lastLiveTickMs = null;
+const seenAlarmEventIds = new Set();
+
+function parseTimestamp(value) {
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+
+    if (typeof value === "number") {
+        return new Date(value < 1_000_000_000_000 ? value * 1000 : value);
+    }
+
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+        return new Date(numeric < 1_000_000_000_000 ? numeric * 1000 : numeric);
+    }
+
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+        return new Date(parsed);
+    }
+
+    if (typeof value === "string") {
+        const normalized = value.trim().replace(" ", "T");
+        const normalizedParsed = Date.parse(normalized);
+        if (!Number.isNaN(normalizedParsed)) {
+            return new Date(normalizedParsed);
+        }
+    }
+
+    return null;
+}
+
+function formatClock(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        return "--";
+    }
+    return date.toLocaleTimeString();
+}
+
+function formatDuration(seconds) {
+    const totalSeconds = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const remainderSeconds = totalSeconds % 60;
+    return [hours, minutes, remainderSeconds]
+        .map((value) => String(value).padStart(2, "0"))
+        .join(":");
+}
+
+function updateLiveStatsUi() {
+    const now = new Date();
+    const nowMs = now.getTime();
+    liveCurrentTime.textContent = formatClock(now);
+
+    if (monitoring) {
+        if (!monitoringStartedAt) {
+            monitoringStartedAt = now;
+        }
+
+        if (lastLiveTickMs === null) {
+            lastLiveTickMs = nowMs;
+        } else {
+            activeElapsedSeconds += Math.max(0, (nowMs - lastLiveTickMs) / 1000);
+            lastLiveTickMs = nowMs;
+        }
+
+        liveTimeStarted.textContent = formatClock(monitoringStartedAt);
+        liveTimeActive.textContent = formatDuration(activeElapsedSeconds);
+    } else {
+        lastLiveTickMs = null;
+        liveTimeStarted.textContent = "--";
+        liveTimeActive.textContent = "--";
+    }
+
+    liveAlarmCount.textContent = String(alarmOccurrences);
+}
+
+function initializeLiveStats() {
+    monitoringStartedAt = monitoring ? parseTimestamp(sessionStartTimestamp) : null;
+    if (monitoring) {
+        if (!monitoringStartedAt) {
+            monitoringStartedAt = new Date();
+        }
+        activeElapsedSeconds = Math.max(
+            0,
+            (Date.now() - monitoringStartedAt.getTime()) / 1000,
+        );
+        lastLiveTickMs = Date.now();
+    } else {
+        activeElapsedSeconds = 0;
+        lastLiveTickMs = null;
+    }
+    alarmOccurrences = 0;
+    seenAlarmEventIds.clear();
+    updateLiveStatsUi();
+    if (!liveClockTimer) {
+        liveClockTimer = window.setInterval(updateLiveStatsUi, 1000);
+    }
+}
+
+function hideSessionStats() {
+    statsPanel.classList.remove("active");
+}
 
 function formatTimestamp(timestamp) {
     if (!timestamp) {
@@ -169,14 +282,16 @@ async function showSessionStats(sessionStart) {
 
     const last = data.last_session;
 
-    document.getElementById("stat-your-threshold").textContent = last.flag_threshold_sec?.toFixed(1) ?? "--";
-    document.getElementById("stat-avg-threshold").textContent = data.avg_threshold?.toFixed(1) ?? "--";
+    document.getElementById("stat-your-focused").textContent =
+        last.focused_duration_sec?.toFixed(0) ?? "--";
+    document.getElementById("stat-avg-focused").textContent =
+        data.avg_attention_duration_sec?.toFixed(0) ?? "--";
     document.getElementById("stat-your-alarms").textContent = last.alarm_count ?? "--";
     document.getElementById("stat-avg-alarms").textContent = data.avg_alarm_count?.toFixed(1) ?? "--";
     document.getElementById("stat-your-duration").textContent = last.duration_sec?.toFixed(0) ?? "--";
     document.getElementById("stat-avg-duration").textContent = data.avg_duration_sec?.toFixed(0) ?? "--";
 
-    statsPanel.hidden = false;
+    statsPanel.classList.add("active");
 }
 
 async function syncStatus() {
@@ -186,9 +301,47 @@ async function syncStatus() {
     }
 
     const payload = await response.json();
+    const wasMonitoring = monitoring;
+    const wasAlarmActive = alarmActive;
     monitoring = Boolean(payload.monitoring);
-    sessionStartTimestamp = payload.updated_at || sessionStartTimestamp;
+
+    if (monitoring && !wasMonitoring) {
+        sessionStartTimestamp = payload.updated_at || sessionStartTimestamp;
+        monitoringStartedAt = parseTimestamp(sessionStartTimestamp) || new Date();
+        activeElapsedSeconds = Math.max(
+            0,
+            (Date.now() - monitoringStartedAt.getTime()) / 1000,
+        );
+        lastLiveTickMs = Date.now();
+        alarmOccurrences = 0;
+        seenAlarmEventIds.clear();
+    } else if (monitoring && !monitoringStartedAt) {
+        monitoringStartedAt = parseTimestamp(sessionStartTimestamp) || new Date();
+        activeElapsedSeconds = Math.max(
+            0,
+            (Date.now() - monitoringStartedAt.getTime()) / 1000,
+        );
+        lastLiveTickMs = Date.now();
+    } else if (!monitoring) {
+        monitoringStartedAt = null;
+        activeElapsedSeconds = 0;
+        lastLiveTickMs = null;
+    }
+
+    if (monitoring && payload.alarm?.active) {
+        const alarmEventId = payload.alarm.event?.id || "";
+        if (alarmEventId) {
+            if (!seenAlarmEventIds.has(alarmEventId)) {
+                seenAlarmEventIds.add(alarmEventId);
+                alarmOccurrences += 1;
+            }
+        } else if (!wasAlarmActive) {
+            alarmOccurrences += 1;
+        }
+    }
+
     updateAlarmUi(payload.alarm);
+    updateLiveStatsUi();
 
     if (!monitoring) {
         const capturedStart = sessionStartTimestamp;
@@ -199,6 +352,7 @@ async function syncStatus() {
         return;
     }
 
+    hideSessionStats();
     await requestCameraAccess();
     if (alarmActive) {
         stopPolling();
@@ -233,6 +387,10 @@ dismissAlarmButton.addEventListener("click", () => {
     dismissAlarm().catch(() => null);
 });
 
+dismissStatsButton.addEventListener("click", () => {
+    hideSessionStats();
+});
+
 updateAlarmUi({
     active: alarmActive,
     event: alarmActive
@@ -246,6 +404,7 @@ updateAlarmUi({
 });
 
 if (monitoring) {
+    hideSessionStats();
     requestCameraAccess()
         .then(() => {
             if (!alarmActive) {
@@ -262,3 +421,5 @@ if (monitoring) {
         showSessionStats(sessionStartTimestamp).catch(() => null);
     }
 }
+
+initializeLiveStats();

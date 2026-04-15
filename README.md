@@ -19,7 +19,7 @@ A real-time attention monitoring system that uses computer vision to detect when
 ## Team Members 
 [Kyle Chen](https://github.com/KyleC55)<br>
 [Minho Eune](https://github.com/minhoeune)<br>
-[name]()<br>
+[Jaiden Xu](https://github.com/jbx202)<br>
 [name]()<br>
 [name]()<br>
 
@@ -53,6 +53,32 @@ cp .env.example .env
 - ORIENTATION_THRESHOLD: Face orientation sensitivity
 
 ## Running The Software 
+
+### Configuration 
+
+Before running the app please make sure these you have **Docker** installed on your machine
+
+This project requires Docker Compose to run the following services:
+- MongoDB
+- Web App
+- Machine Learning Client 
+
+### Global Statistics Environment Variables
+
+You can configure default global statistics in `.env` for the web app:
+
+- `GLOBAL_STATS_COLLECTION` (Mongo collection for aggregate stats)
+- `GLOBAL_STATS_SESSION_COUNT`
+- `GLOBAL_STATS_TOTAL_DURATION_SEC`
+- `GLOBAL_STATS_TOTAL_ALARM_DURATION_SEC`
+- `GLOBAL_STATS_TOTAL_ATTENTION_DURATION_SEC`
+- `GLOBAL_STATS_TOTAL_ATTENTION_RATIO`
+- `GLOBAL_STATS_TOTAL_ALERT_COUNT`
+- `GLOBAL_AVG_THRESHOLD_SEC`
+- `GLOBAL_AVG_ALARM_COUNT`
+- `GLOBAL_AVG_DURATION_SEC`
+
+If no global stats document exists in MongoDB, the web app now uses these values as defaults.
 
 ### How To Run 
 

@@ -13,6 +13,7 @@
     data-alarm-state="{{ alarm.event.state if alarm.event else '' }}"
     data-alarm-timestamp="{{ alarm.event.timestamp if alarm.event else '' }}"
     data-just-stopped="{{ 'true' if request.args.get('stopped') == '1' else 'false' }}"
+    id = 'body'
 >
     <main>
         <video id="camera-preview" autoplay playsinline muted></video>
@@ -27,34 +28,68 @@
         </form>
     </main>
 
-    <section id="stats-panel" hidden>
-        <h2>Session Summary</h2>
+    
+    <video id="camera-preview" autoplay playsinline muted></video>
+
+    <section id="live-stats-panel" aria-live="polite" aria-atomic="true">
+        <h2>Live Stats</h2>
         <table>
-            <thead>
-                <tr>
-                    <th></th>
-                    <th>Your Session</th>
-                    <th>Global Average</th>
-                </tr>
-            </thead>
             <tbody>
                 <tr>
-                    <td>Attention Threshold (s)</td>
-                    <td id="stat-your-threshold">--</td>
-                    <td id="stat-avg-threshold">--</td>
+                    <td>Time Started</td>
+                    <td id="live-time-started">--</td>
                 </tr>
                 <tr>
-                    <td>Times Reminded</td>
-                    <td id="stat-your-alarms">--</td>
-                    <td id="stat-avg-alarms">--</td>
+                    <td>Current Time</td>
+                    <td id="live-current-time">--</td>
                 </tr>
                 <tr>
-                    <td>Session Duration (s)</td>
-                    <td id="stat-your-duration">--</td>
-                    <td id="stat-avg-duration">--</td>
+                    <td>Time Active</td>
+                    <td id="live-time-active">--</td>
+                </tr>
+                <tr>
+                    <td>Times Alarm Occurred</td>
+                    <td id="live-alarm-count">0</td>
                 </tr>
             </tbody>
         </table>
+    </section>
+
+    <audio id="alarm-audio" preload="auto" loop>
+        <source src="{{ url_for('static', filename='audio/TF041.WAV') }}" type="audio/wav">
+    </audio>
+
+    <section id="stats-panel" aria-live="polite" aria-atomic="true">
+        <article class="popup" role="dialog" aria-modal="true" aria-labelledby="stats-title">
+            <h2 id="stats-title">Session Summary</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Your Session</th>
+                        <th>Global Average</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Focused Time (s)</td>
+                        <td id="stat-your-focused">--</td>
+                        <td id="stat-avg-focused">--</td>
+                    </tr>
+                    <tr>
+                        <td>Times Reminded</td>
+                        <td id="stat-your-alarms">--</td>
+                        <td id="stat-avg-alarms">--</td>
+                    </tr>
+                    <tr>
+                        <td>Session Duration (s)</td>
+                        <td id="stat-your-duration">--</td>
+                        <td id="stat-avg-duration">--</td>
+                    </tr>
+                </tbody>
+            </table>
+            <button id="dismiss-stats-button" type="button">Close</button>
+        </article>
     </section>
 
     <section
