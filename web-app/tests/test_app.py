@@ -683,6 +683,7 @@ def test_stop_monitoring_queries_events_with_float_timestamp(client):
         patch("app.set_monitoring_status"),
         patch("app.event_collection.find", return_value=[]) as mock_find,
         patch("app.update_global_stats"),
+        patch("time.sleep"),
     ):
         client.post("/stop")
 
