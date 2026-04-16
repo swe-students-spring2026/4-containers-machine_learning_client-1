@@ -671,7 +671,6 @@ def test_status_started_at_with_float_timestamp(client):
 
 def test_stop_monitoring_queries_events_with_float_timestamp(client):
     """Test stop_monitoring converts session_start_at to float for event query."""
-    from datetime import datetime, timezone
 
     fake_control = {
         "session_start_at": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc)

@@ -355,8 +355,7 @@ def stop_monitoring():
         session_stats = compute_session_attention(events)
         if session_stats is None:
             session_stats = build_fallback_session_stats(session_start_at)
-        if session_stats is not None:
-            update_global_stats(session_stats)
+        update_global_stats(session_stats)
 
     return redirect(url_for("home") + "?stopped=1")
 
