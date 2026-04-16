@@ -306,7 +306,7 @@ async function syncStatus() {
     monitoring = Boolean(payload.monitoring);
 
     if (monitoring && !wasMonitoring) {
-        sessionStartTimestamp = payload.updated_at || sessionStartTimestamp;
+        sessionStartTimestamp = payload.started_at || sessionStartTimestamp;
         monitoringStartedAt = parseTimestamp(sessionStartTimestamp) || new Date();
         activeElapsedSeconds = Math.max(
             0,

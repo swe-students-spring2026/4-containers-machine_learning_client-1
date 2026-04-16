@@ -55,6 +55,7 @@ main {
     padding: 24px;
     position: relative;
     z-index: 200;
+    gap: 28px
 }
 
 button {
@@ -142,15 +143,16 @@ button:disabled {
 }
 
 video {
-    width: 360px;
-    height: 270px;
+    width: 700px;
+    max-width: 95vw;
+    height: auto;
+    aspect-ratio: 4 / 3;
     object-fit: cover;
     border-radius: 20px;
     border: 2px solid #121212;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
     background: #000;
     opacity: 1;
-    margin-bottom: 24px;
     pointer-events: none;
     margin: 0 auto;
 }
@@ -228,4 +230,10 @@ video {
 
 #dismiss-stats-button {
     margin-top: 12px;
+}
+
+#app-title {
+    font-size: 2rem;
+    margin-bottom: 8px;
+    text-align: center;
 }

@@ -13,8 +13,10 @@
     data-alarm-state="{{ alarm.event.state if alarm.event else '' }}"
     data-alarm-timestamp="{{ alarm.event.timestamp if alarm.event else '' }}"
     data-just-stopped="{{ 'true' if request.args.get('stopped') == '1' else 'false' }}"
-    id = 'body'
+    id="body"
 >
+    <h1 id="app-title">Focus Monitor</h1>
+
     <main>
         <video id="camera-preview" autoplay playsinline muted></video>
         <form method="post" action="{{ url_for('stop_monitoring' if monitoring else 'start_monitoring') }}">
@@ -27,9 +29,6 @@
             </button>
         </form>
     </main>
-
-    
-    <video id="camera-preview" autoplay playsinline muted></video>
 
     <section id="live-stats-panel" aria-live="polite" aria-atomic="true">
         <h2>Live Stats</h2>
@@ -117,9 +116,6 @@
             </button>
         </article>
     </section>
-    <audio id="alarm-audio" preload="auto" loop>
-        <source src="{{ url_for('static', filename='audio/TF041.WAV') }}" type="audio/wav">
-    </audio>
 
     <script src="{{ url_for('static', filename='js/index.js') }}"></script>
 </body>
