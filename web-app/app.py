@@ -178,7 +178,7 @@ def home():
     control = get_monitoring_control()
     monitoring = control.get("status") == "running"
     session_start_at = control.get("session_start_at")
-    monitoring_since = session_start_at.timestamp() if session_start_at else ""
+    monitoring_since = session_start_at if session_start_at else ""
     return render_template(
         "index.html",
         monitoring=monitoring,
@@ -343,7 +343,7 @@ def stop_monitoring():
                     {
                         "session_id": {"$exists": True},
                         "label": {"$exists": True},
-                        "timestamp": {"$gte": session_start_at},
+                        "timestamp": {"$gte": to_seconds(session_start_at)},
                     }
                 )
             )
@@ -355,8 +355,7 @@ def stop_monitoring():
         session_stats = compute_session_attention(events)
         if session_stats is None:
             session_stats = build_fallback_session_stats(session_start_at)
-        if session_stats is not None:
-            update_global_stats(session_stats)
+        update_global_stats(session_stats)
 
     return redirect(url_for("home") + "?stopped=1")
 
@@ -372,7 +371,7 @@ def get_status():
         {
             "monitoring": control.get("status") == "running",
             "updated_at": updated_at,
-            "started_at": session_start_at.timestamp() if session_start_at else None,
+            "started_at": to_seconds(session_start_at) if session_start_at else None,
             "alarm": build_alarm_payload(control),
         }
     )

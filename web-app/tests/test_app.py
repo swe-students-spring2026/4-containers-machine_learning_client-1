@@ -650,3 +650,41 @@ def test_stop_monitoring_uses_fallback_when_session_stats_none(client):
     else:
         assert fallback_stats["attention_ratio"] == 0.0
     assert fallback_stats["alert_count"] == 0
+
+
+def test_status_started_at_with_float_timestamp(client):
+    """Test /status handles float session_start_at without AttributeError."""
+    with patch(
+        "app.get_monitoring_control",
+        return_value={
+            "status": "running",
+            "session_start_at": 1713200000.0,
+            "updated_at": 1713200000.0,
+        },
+    ):
+        response = client.get("/status")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["started_at"] == 1713200000.0
+
+
+def test_stop_monitoring_queries_events_with_float_timestamp(client):
+    """Test stop_monitoring converts session_start_at to float for event query."""
+
+    fake_control = {
+        "session_start_at": datetime(2026, 4, 15, 12, 0, 0, tzinfo=timezone.utc)
+    }
+    expected_ts = fake_control["session_start_at"].timestamp()
+
+    with (
+        patch("app.get_monitoring_control", return_value=fake_control),
+        patch("app.set_monitoring_status"),
+        patch("app.event_collection.find", return_value=[]) as mock_find,
+        patch("app.update_global_stats"),
+        patch("time.sleep"),
+    ):
+        client.post("/stop")
+
+    call_query = mock_find.call_args[0][0]
+    assert call_query["timestamp"]["$gte"] == expected_ts

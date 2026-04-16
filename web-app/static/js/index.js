@@ -283,13 +283,13 @@ async function showSessionStats(sessionStart) {
     const last = data.last_session;
 
     document.getElementById("stat-your-focused").textContent =
-        last.focused_duration_sec?.toFixed(0) ?? "--";
+        last.focused_duration_sec != null ? formatDuration(last.focused_duration_sec) : "--";
     document.getElementById("stat-avg-focused").textContent =
-        data.avg_attention_duration_sec?.toFixed(0) ?? "--";
-    document.getElementById("stat-your-alarms").textContent = last.alarm_count ?? "--";
-    document.getElementById("stat-avg-alarms").textContent = data.avg_alarm_count?.toFixed(1) ?? "--";
-    document.getElementById("stat-your-duration").textContent = last.duration_sec?.toFixed(0) ?? "--";
-    document.getElementById("stat-avg-duration").textContent = data.avg_duration_sec?.toFixed(0) ?? "--";
+        data.avg_attention_duration_sec != null ? formatDuration(data.avg_attention_duration_sec) : "--";
+    document.getElementById("stat-your-duration").textContent =
+        last.duration_sec != null ? formatDuration(last.duration_sec) : "--";
+    document.getElementById("stat-avg-duration").textContent =
+        data.avg_duration_sec != null ? formatDuration(data.avg_duration_sec) : "--";
 
     statsPanel.classList.add("active");
 }
