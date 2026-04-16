@@ -177,7 +177,8 @@ def home():
 
     control = get_monitoring_control()
     monitoring = control.get("status") == "running"
-    monitoring_since = control.get("updated_at", "")
+    session_start_at = control.get("session_start_at")
+    monitoring_since = session_start_at.timestamp() if session_start_at else ""
     return render_template(
         "index.html",
         monitoring=monitoring,
@@ -365,10 +366,11 @@ def get_status():
     """Return the current monitoring status."""
 
     control = get_monitoring_control()
+    session_start_at = control.get("session_start_at")
     return jsonify(
         {
             "monitoring": control.get("status") == "running",
-            "updated_at": control.get("updated_at"),
+            "started_at": session_start_at.timestamp() if session_start_at else None,
             "alarm": build_alarm_payload(control),
         }
     )
