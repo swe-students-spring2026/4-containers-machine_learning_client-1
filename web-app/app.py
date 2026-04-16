@@ -367,9 +367,11 @@ def get_status():
 
     control = get_monitoring_control()
     session_start_at = control.get("session_start_at")
+    updated_at = control.get("updated_at")
     return jsonify(
         {
             "monitoring": control.get("status") == "running",
+            "updated_at": updated_at,
             "started_at": session_start_at.timestamp() if session_start_at else None,
             "alarm": build_alarm_payload(control),
         }
